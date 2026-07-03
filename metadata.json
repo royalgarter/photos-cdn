@@ -1,0 +1,6 @@
+{
+  "name": "Photos CDN API",
+  "description": "An interactive development playground and production-ready code generator for a high-performance native Deno Photos CDN API integrated with ArangoDB, Cloudflare R2, Workers AI, and Deno KV.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
