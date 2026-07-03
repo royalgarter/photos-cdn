@@ -1,5 +1,4 @@
 import express from "express";
-import path from "node:path";
 import { GoogleGenAI } from "@google/genai";
 import { Database } from "arangojs";
 import { Jimp } from "jimp";
@@ -1582,7 +1581,7 @@ async function startServer() {
 
   // Serve index.html on root request
   app.get("/", (req, res) => {
-    res.sendFile(path.join(process.cwd(), "index.html"));
+    res.sendFile(`${process.cwd()}/index.html`);
   });
 
   app.listen(PORT, "0.0.0.0", () => {
