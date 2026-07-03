@@ -146,7 +146,8 @@ const registerAppState = () => {
       r2Endpoint: "",
       cfAccountId: "",
       cfApiToken: "",
-      hfApiToken: ""
+      hfApiToken: "",
+      cdnDomain: ""
     },
     settingsSavedMessage: false,
 

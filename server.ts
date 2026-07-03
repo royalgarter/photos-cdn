@@ -55,6 +55,7 @@ interface AppSettings {
   cfAccountId: string;
   cfApiToken: string;
   hfApiToken: string;
+  cdnDomain: string;
   // placeholder: stabilityApiKey: string;
   // placeholder: openaiApiKey: string;
 }
@@ -308,7 +309,8 @@ async function connectToArango() {
         r2Endpoint: "",
         cfAccountId: "",
         cfApiToken: "",
-        hfApiToken: ""
+        hfApiToken: "",
+        cdnDomain: ""
       });
       addLog("system", "ArangoDB 'Settings' collection initialized with default configuration structure.");
     } else {
@@ -355,7 +357,8 @@ async function getSettings(): Promise<AppSettings> {
     r2Endpoint: doc.r2Endpoint || "",
     cfAccountId: doc.cfAccountId || "",
     cfApiToken: doc.cfApiToken || "",
-    hfApiToken: doc.hfApiToken || ""
+    hfApiToken: doc.hfApiToken || "",
+    cdnDomain: doc.cdnDomain || ""
   };
 }
 
@@ -450,6 +453,33 @@ const RESOLUTIONS: Record<string, { w: number; h: number }> = {
   thumbnail: { w: 150, h: 150 }
 };
 
+async function compressImage(buffer: Buffer, mimeType: string): Promise<Buffer> {
+  try {
+    const formData = new FormData();
+    const blob = new Blob([buffer], { type: mimeType });
+    formData.append("files", blob, "image.jpg");
+
+    const res = await fetch("https://api.resmush.it/ws.php?qlty=82", {
+      method: "POST",
+      body: formData,
+      signal: AbortSignal.timeout(15000)
+    });
+
+    if (!res.ok) throw new Error(`resmush.it HTTP ${res.status}`);
+    const json = await res.json() as any;
+    if (!json?.dest) throw new Error("resmush.it: no dest URL in response");
+
+    const compressed = await fetch(json.dest, { signal: AbortSignal.timeout(15000) });
+    if (!compressed.ok) throw new Error(`resmush.it download failed: ${compressed.status}`);
+    const compressedBuffer = Buffer.from(await compressed.arrayBuffer());
+    addLog("queue", `[Compress] resmush.it: ${buffer.length} → ${compressedBuffer.length} bytes (${Math.round((1 - compressedBuffer.length / buffer.length) * 100)}% saved)`);
+    return compressedBuffer;
+  } catch (err) {
+    addLog("queue", `[Compress] resmush.it failed: ${(err as Error).message}. Using original buffer.`);
+    return buffer;
+  }
+}
+
 async function uploadToS3(
   settings: AppSettings,
   resolutionName: string,
@@ -480,17 +510,16 @@ async function uploadToS3(
       ContentType: mimeType
     }));
 
-    let baseUrl = settings.r2Endpoint;
-    if (baseUrl) {
-      if (!baseUrl.startsWith("http")) {
-        baseUrl = `https://${baseUrl}`;
-      }
-      if (baseUrl.includes("cloudflarestorage.com")) {
-        return `https://photos.newsrss.org/${key}`;
-      } else {
-        return `${baseUrl}/${key}`;
-      }
-    }
+    // Prefer explicit custom CDN domain, else fall back to r2Endpoint
+    const cdnBase = settings.cdnDomain
+      ? settings.cdnDomain.replace(/\/$/, "")
+      : (() => {
+          let baseUrl = settings.r2Endpoint || "";
+          if (baseUrl && !baseUrl.startsWith("http")) baseUrl = `https://${baseUrl}`;
+          return baseUrl;
+        })();
+
+    if (cdnBase) return `${cdnBase}/${key}`;
     return `s3://${settings.r2BucketName}/${key}`;
   } catch (err) {
     addLog("queue", `S3/R2 Upload Failed for ${resolutionName}: ${(err as Error).message}`);
@@ -881,12 +910,17 @@ async function generateImageAndSave(prompt: string, category: string, seed: numb
   const variants: Record<string, string> = {};
 
   addLog("queue", `[On-Demand] Jimp: Resizing and preparing multi-variant resolutions (Desktop, Mobile, Tablet)...`);
+  addLog("queue", `[On-Demand] Jimp: Source size ${jimpImg.width}x${jimpImg.height}. Applying cover-fill transform to all ${Object.keys(RESOLUTIONS).length} presets...`);
 
   for (const [resName, dim] of Object.entries(RESOLUTIONS)) {
     addLog("queue", `[On-Demand] Jimp: Resizing variant '${resName}' to ${dim.w}x${dim.h}...`);
+    // cover: scale to fill entire target box (crops excess) — correct for CDN wallpapers
     const cloned = jimpImg.clone().cover({ w: dim.w, h: dim.h });
-    const buffer = await cloned.getBuffer("image/jpeg");
+    const rawBuffer = await cloned.getBuffer("image/jpeg", { quality: 85 });
     const base64Str = await cloned.getBase64("image/jpeg");
+
+    // Compress before upload
+    const buffer = await compressImage(rawBuffer, "image/jpeg");
 
     // Try uploading to S3
     const s3Url = await uploadToS3(settings, resName, key, buffer, "image/jpeg");
@@ -1203,5 +1237,9 @@ async function startServer() {
     addLog("system", `Photos CDN Development playground running at http://localhost:${PORT}`);
   });
 }
+
+process.on("unhandledRejection", (reason) => {
+  console.error("[FATAL] Unhandled promise rejection:", reason);
+});
 
 startServer();
