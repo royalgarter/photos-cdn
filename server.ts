@@ -3,6 +3,7 @@ import path from "path";
 import { GoogleGenAI } from "@google/genai";
 import { Database } from "arangojs";
 import { Jimp } from "jimp";
+import sharp from "sharp";
 import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
 
 const app = express();
@@ -58,6 +59,42 @@ interface AppSettings {
   cdnDomain: string;
   // placeholder: stabilityApiKey: string;
   // placeholder: openaiApiKey: string;
+}
+
+// ==========================================
+// OUTPUT FORMAT HELPERS
+// ==========================================
+
+type OutputFormat = "jpg" | "png" | "webp";
+
+const OUTPUT_MIME: Record<OutputFormat, string> = {
+  jpg: "image/jpeg",
+  png: "image/png",
+  webp: "image/webp"
+};
+
+function parseOutputFormat(raw: string | undefined): OutputFormat {
+  const f = (raw || "jpg").toLowerCase().replace("jpeg", "jpg");
+  if (f === "png" || f === "webp" || f === "jpg") return f;
+  return "jpg";
+}
+
+async function convertBuffer(input: Buffer, fmt: OutputFormat): Promise<Buffer> {
+  const s = sharp(input);
+  if (fmt === "webp") return s.webp({ quality: 82 }).toBuffer();
+  if (fmt === "png") return s.png({ compressionLevel: 8 }).toBuffer();
+  return s.jpeg({ quality: 85 }).toBuffer();
+}
+
+async function fetchAndConvert(url: string, fmt: OutputFormat): Promise<Buffer | null> {
+  try {
+    const res = await fetch(url, { signal: AbortSignal.timeout(15000) });
+    if (!res.ok) return null;
+    const raw = Buffer.from(await res.arrayBuffer());
+    return convertBuffer(raw, fmt);
+  } catch {
+    return null;
+  }
 }
 
 // ArangoDB instance configuration
@@ -1076,8 +1113,9 @@ app.get("/api/cdn/:width/:height", async (req, res) => {
     const seed = parseInt(req.query.seed as string) || 42;
     const textQuery = req.query.text as string;
     const format = (req.query.format as string) || "image";
+    const outputFormat = parseOutputFormat(req.query.output as string);
 
-    addLog("api", `[Request Received] GET /${width}/${height}?category=${category}&seed=${seed}&text=${textQuery || "none"}&format=${format}`);
+    addLog("api", `[Request Received] GET /${width}/${height}?category=${category}&seed=${seed}&text=${textQuery || "none"}&format=${format}&output=${outputFormat}`);
 
     const currentImages = await getImages();
     let matchedImage: ImageDocument | null = null;
@@ -1175,33 +1213,41 @@ app.get("/api/cdn/:width/:height", async (req, res) => {
 
     // Serve custom base64 or S3 multi-variant images from database if available
     if (finalImage.variants) {
-      // Find the closest resolution name based on the requested width/height
+      // Find closest resolution preset to requested dimensions
       let bestVariantName = "medium";
       let minDiff = Infinity;
-      
       for (const [resName, dim] of Object.entries(RESOLUTIONS)) {
         const diff = Math.abs(dim.w - width) + Math.abs(dim.h - height);
-        if (diff < minDiff) {
-          minDiff = diff;
-          bestVariantName = resName;
-        }
+        if (diff < minDiff) { minDiff = diff; bestVariantName = resName; }
       }
 
       const servedData = finalImage.variants[bestVariantName] || finalImage.variants.medium || finalImage.variants.original;
 
       if (servedData) {
+        // Decode raw buffer from base64 data URI or fetch from S3/CDN URL
+        let rawBuffer: Buffer | null = null;
+
         if (servedData.startsWith("data:")) {
-          const matches = servedData.match(/^data:([a-zA-Z0-9]+\/[a-zA-Z0-9-.+]+);base64,(.*)$/);
-          if (matches && matches.length === 3) {
-            const mime = matches[1];
-            const buffer = Buffer.from(matches[2], "base64");
-            res.setHeader("Content-Type", mime);
-            addLog("api", `[Phase 4] Delivery: Serving cached custom multi-variant resolution '${bestVariantName}' (${width}x${height}) natively from ArangoDB.`);
-            return res.status(200).send(buffer);
-          }
+          const matches = servedData.match(/^data:[^;]+;base64,(.*)$/);
+          if (matches) rawBuffer = Buffer.from(matches[1], "base64");
         } else if (servedData.startsWith("http") || servedData.startsWith("s3://")) {
-          addLog("api", `[Phase 4] Delivery: HTTP 302 Redirecting to S3/R2 Cached asset '${bestVariantName}' -> ${servedData}`);
-          return res.redirect(302, servedData);
+          if (outputFormat !== "jpg") {
+            // Need to fetch and convert — can't redirect for format transform
+            rawBuffer = await fetchAndConvert(servedData, outputFormat);
+          } else {
+            // Native JPEG stored in S3 — just redirect, no conversion needed
+            addLog("api", `[Phase 4] Delivery: 302 → S3/R2 '${bestVariantName}' (${outputFormat}) -> ${servedData}`);
+            res.setHeader("Content-Type", "image/jpeg");
+            return res.redirect(302, servedData);
+          }
+        }
+
+        if (rawBuffer) {
+          const converted = await convertBuffer(rawBuffer, outputFormat);
+          const mime = OUTPUT_MIME[outputFormat];
+          res.setHeader("Content-Type", mime);
+          addLog("api", `[Phase 4] Delivery: Serving '${bestVariantName}' (${width}x${height}) as ${outputFormat} (${converted.length} bytes).`);
+          return res.status(200).send(converted);
         }
       }
     }
