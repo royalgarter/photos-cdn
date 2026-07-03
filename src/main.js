@@ -133,7 +133,6 @@ const registerAppState = () => {
     images: [],
     queue: [],
     logs: [],
-    denoCode: "",
     loading: false,
     copied: false,
 
@@ -179,7 +178,6 @@ const registerAppState = () => {
       this.fetchImages();
       this.fetchQueue();
       this.fetchLogs();
-      this.fetchDenoCode();
       this.fetchSettings();
 
       // Background Poll
@@ -227,7 +225,7 @@ const registerAppState = () => {
     async fetchImages() {
       try {
         const res = await fetch("/api/images");
-        if (res.ok) {
+        if (res.ok && res.headers.get("Content-Type")?.includes("application/json")) {
           const data = await res.json();
           this.images = data;
           if (data && data.length > 0 && !this.selectedDbImageKey) {
@@ -243,7 +241,7 @@ const registerAppState = () => {
     async fetchQueue() {
       try {
         const res = await fetch("/api/queue");
-        if (res.ok) {
+        if (res.ok && res.headers.get("Content-Type")?.includes("application/json")) {
           this.queue = await res.json();
         }
       } catch (e) {
@@ -255,20 +253,8 @@ const registerAppState = () => {
     async fetchLogs() {
       try {
         const res = await fetch("/api/logs");
-        if (res.ok) {
+        if (res.ok && res.headers.get("Content-Type")?.includes("application/json")) {
           this.logs = await res.json();
-        }
-      } catch (e) {
-        console.error(e);
-      }
-    },
-
-    // Fetch Deno source code
-    async fetchDenoCode() {
-      try {
-        const res = await fetch("/deno_cdn.ts");
-        if (res.ok) {
-          this.denoCode = await res.text();
         }
       } catch (e) {
         console.error(e);
@@ -323,17 +309,26 @@ const registerAppState = () => {
 
         let finalUrl = testUrl;
         let blurhashStr = "";
+        const isRedirect = res.status === 0 || (res.status >= 300 && res.status < 400);
 
-        if (this.format === "blurhash") {
-          const data = await res.json();
-          blurhashStr = data.blurhash;
-          finalUrl = data.sourceUrl;
+        if (res.ok || isRedirect) {
+          if (this.format === "blurhash") {
+            if (res.headers.get("Content-Type")?.includes("application/json")) {
+              const data = await res.json();
+              blurhashStr = data.blurhash;
+              finalUrl = data.sourceUrl;
+            } else {
+              console.warn("Expected JSON response for blurhash format but got non-JSON payload.");
+            }
+          } else {
+            finalUrl = res.url || testUrl;
+          }
         } else {
-          finalUrl = res.url;
+          console.warn(`API request to ${testUrl} failed with status: ${res.status}`);
         }
 
         const matchedImage = this.images.find(
-          (img) => finalUrl.includes(img._key) || finalUrl.includes(encodeURIComponent(img.text))
+          (img) => finalUrl && (finalUrl.includes(img._key) || finalUrl.includes(encodeURIComponent(img.text)))
         );
 
         this.testResult = {
@@ -370,18 +365,11 @@ const registerAppState = () => {
       }
     },
 
-    // Copy to clipboard
-    copyToClipboard() {
-      navigator.clipboard.writeText(this.denoCode);
-      this.copied = true;
-      setTimeout(() => { this.copied = false; }, 2000);
-    },
-
     // Fetch and Save Settings API
     async fetchSettings() {
       try {
         const res = await fetch("/api/settings");
-        if (res.ok) {
+        if (res.ok && res.headers.get("Content-Type")?.includes("application/json")) {
           this.settings = await res.json();
         }
       } catch (e) {

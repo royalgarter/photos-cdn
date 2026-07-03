@@ -47,7 +47,7 @@
                   Photos CDN API
                 </h1>
                 <span class="text-xs uppercase font-mono px-2 py-0.5 border border-blue-500 text-blue-600 font-semibold tracking-wider">
-                  Deno Native Sandbox
+                  Node.js API Sandbox
                 </span>
               </div>
               <p class="text-xs text-gray-500">Zero-SDK Edge Optimized Dynamic Image Delivery Platform</p>
@@ -80,14 +80,6 @@
               <i data-lucide="layers" class="h-3.5 w-3.5"></i>
               ArangoDB Queue
               <span x-show="activeQueueCount > 0" class="absolute top-1 right-1 h-1.5 w-1.5 bg-yellow-500"></span>
-            </button>
-            <button
-              @click="activeTab = 'code'"
-              class="flex items-center gap-2 px-4 py-2 text-xs font-medium transition-colors"
-              :class="activeTab === 'code' ? 'bg-blue-600 text-white border border-blue-600 font-bold' : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'"
-            >
-              <i data-lucide="code" class="h-3.5 w-3.5"></i>
-              Deno Source Code
             </button>
             <button
               @click="activeTab = 'settings'"
@@ -540,7 +532,7 @@
                       <i data-lucide="database" class="h-4 w-4 text-blue-500"></i>
                       ArangoDB: Images Collection Vector Storage
                     </h2>
-                    <p class="text-xs text-gray-500">Stores image metadata along with 10-dimensional dense vectors</p>
+                    <p class="text-xs text-gray-500">Stores image metadata along with 128-dimensional dense vectors (using gemini-embedding-2)</p>
                   </div>
                   <button 
                     @click="handleReset()"
@@ -754,42 +746,6 @@
               </div>
             </div>
 
-            <!-- TAB: DENO NATIVE CODE EXPORTER -->
-            <div x-show="activeTab === 'code'" class="space-y-6" x-transition>
-              <div class="bg-white border border-gray-300 p-6">
-                <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4">
-                  <div>
-                    <h2 class="text-sm font-bold text-gray-900 flex items-center gap-2">
-                      <i data-lucide="code" class="h-4 w-4 text-blue-500"></i>
-                      `deno_cdn.ts` Production Code
-                    </h2>
-                    <p class="text-xs text-gray-500">Pure vanilla TypeScript targeting native Deno runtime</p>
-                  </div>
-                  <button
-                    @click="copyToClipboard()"
-                    class="text-xs bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 px-4 border border-blue-700 flex items-center gap-1.5 transition-colors self-start cursor-pointer"
-                  >
-                    <span x-show="copied" class="flex items-center gap-1.5">
-                      <i data-lucide="check" class="h-3.5 w-3.5"></i>
-                      Copied code!
-                    </span>
-                    <span x-show="!copied" class="flex items-center gap-1.5">
-                      <i data-lucide="copy" class="h-3.5 w-3.5"></i>
-                      Copy to Clipboard
-                    </span>
-                  </button>
-                </div>
-
-                <p class="text-xs text-gray-500 leading-relaxed mb-4">
-                  This file is located at the root of the project space. It executes **zero heavy SDK imports** and acts directly as a single high-performance Edge API endpoint. Perfect for uploading to Deno Deploy, Cloud Run, or generic VPS instances!
-                </p>
-
-                <div class="bg-gray-50 border border-gray-300 p-4 max-h-[500px] overflow-y-auto font-mono text-xs leading-relaxed select-text">
-                  <pre class="text-gray-800" x-text="denoCode"></pre>
-                </div>
-              </div>
-            </div>
-
             <!-- TAB: SYSTEM SETTINGS -->
             <div x-show="activeTab === 'settings'" class="space-y-6" x-transition>
               <div class="bg-white border border-gray-300 p-6 space-y-6">
@@ -819,7 +775,7 @@
                         placeholder="AIzaSy... (Input your Gemini key here)"
                         class="w-full bg-white border border-gray-300 px-3 py-2 text-xs font-mono text-gray-900 focus:outline-none focus:border-blue-500"
                       />
-                      <p class="text-xs text-gray-400 mt-1">Used to extract unit-length dense 10-dimensional semantic vectors using the modern Gemini-2.5-flash model.</p>
+                      <p class="text-xs text-gray-400 mt-1">Used to extract unit-length dense 128-dimensional semantic vectors using the state-of-the-art gemini-embedding-2 model.</p>
                     </div>
                   </div>
 
@@ -948,8 +904,8 @@
                 </div>
                 <div class="flex justify-between items-center bg-gray-50 p-2.5 border border-gray-200">
                   <span class="text-gray-500">Job Queue Manager</span>
-                  <span class="text-xs text-green-600 border border-green-500 px-2 py-0.5 font-bold">
-                    Deno.openKv()
+                  <span class="text-xs text-blue-600 border border-blue-500 px-2 py-0.5 font-bold">
+                    ArangoDB Collection
                   </span>
                 </div>
               </div>

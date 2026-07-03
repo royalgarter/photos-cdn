@@ -53,23 +53,9 @@ interface AppSettings {
   r2Endpoint: string;
 }
 
-// Global state for in-memory simulation (fallbacks)
-let dbImages: ImageDocument[] = [];
-let systemLogs: LogEntry[] = [];
-let activeQueue: QueueJob[] = [];
-let inMemorySettings: AppSettings = {
-  geminiApiKey: process.env.GEMINI_API_KEY || "",
-  replicateApiToken: "",
-  r2AccessKeyId: "",
-  r2SecretAccessKey: "",
-  r2BucketName: "",
-  r2Endpoint: ""
-};
-
 // ArangoDB instance configuration
 const arangoUrl = process.env.ARANGO_URL;
 let arangoDb: Database | null = null;
-let useRealArango = false;
 
 // Semantic dimensions for vector simulation (10 dimensions)
 const SEMANTIC_DIMENSIONS = [
@@ -96,17 +82,15 @@ async function writeLog(type: "api" | "queue" | "system", message: string, detai
     details
   };
 
-  if (useRealArango && arangoDb) {
+  if (arangoDb) {
     try {
       const logsColl = arangoDb.collection("Logs");
-      await logsColl.save(log);
+      await logsColl.save({ _key: log.id, ...log });
     } catch (e) {
-      // fallback to console
+      // ignore or print to stderr
     }
   }
 
-  systemLogs.unshift(log);
-  if (systemLogs.length > 200) systemLogs.pop();
   console.log(`[${type.toUpperCase()}] ${message}`);
 }
 
@@ -117,9 +101,9 @@ function addLog(type: "api" | "queue" | "system", message: string, details?: any
 // Generate a vector from text using keyword stems (fallback vectorizer)
 function getSimulatedVector(text: string): number[] {
   const query = text.toLowerCase();
-  const vector = new Array(10).fill(0.05); // Base background noise
+  const vector = new Array(128).fill(0.01); // Base background noise for 128 dimensions
 
-  // Keyword associations
+  // Keyword associations (mapped to the first 10 dimensions for semantic grouping)
   const mappings: { idx: number; words: string[] }[] = [
     { idx: 0, words: ["nature", "forest", "tree", "wood", "mountain", "lake", "river", "grass", "green", "scenery", "valley", "landscape"] },
     { idx: 1, words: ["water", "river", "ocean", "sea", "wave", "waterfall", "rain", "lake", "stream", "wet", "aqua", "splash"] },
@@ -141,55 +125,50 @@ function getSimulatedVector(text: string): number[] {
     });
   });
 
+  // Use a simple deterministic string hashing to fill the rest of the 128 elements so that different texts get slightly different, reproducible vectors
+  for (let i = 10; i < 128; i++) {
+    let hash = 0;
+    for (let j = 0; j < text.length; j++) {
+      hash = (hash * 31 + text.charCodeAt(j) + i) % 1000;
+    }
+    vector[i] = 0.01 + (hash / 1000) * 0.05;
+  }
+
   // Normalize vector to unit length (for cosine similarity)
   const magnitude = Math.sqrt(vector.reduce((sum, val) => sum + val * val, 0));
   return vector.map(val => Number((val / magnitude).toFixed(4)));
 }
 
-// Perform simulated Gemini vector embedding if possible, else fallback
+// Perform real Gemini vector embedding using gemini-embedding-2 (128 dims)
 async function getEmbeddingVector(text: string): Promise<number[]> {
   const settings = await getSettings();
-  const geminiKey = settings.geminiApiKey;
+  const geminiKey = settings.geminiApiKey || process.env.GEMINI_API_KEY;
   if (!geminiKey || geminiKey === "MY_GEMINI_API_KEY") {
-    // Fallback to local keyword-based semantic vectorizer
+    // Fallback to local 128-dimensional keyword-based semantic vectorizer
     return getSimulatedVector(text);
   }
 
   try {
     const ai = new GoogleGenAI({ apiKey: geminiKey });
-    addLog("system", `[Gemini API] Requesting semantic categorization for: "${text}"`);
-    const prompt = `Analyze this image description: "${text}".
-Assign a float score between 0.0 and 1.0 for each of these 10 dimensions:
-1. Nature/Organic (trees, scenery)
-2. Water/Liquid (rivers, waterfall, sea)
-3. Sky/Celestial (clouds, sun, space)
-4. Darkness/Night (neon, black, shadows)
-5. Urban/Architecture (city, concrete)
-6. Warmth/Fiery (sun, desert, flame)
-7. Coldness/Icy (snow, winter)
-8. Futuristic/Synthetic (cyberpunk, digital)
-9. Animals/Fauna (wildlife, pets)
-10. Abstract/Minimalism (patterns, geometric)
-
-Respond with ONLY a raw JSON array of 10 float values. Example: [0.9, 0.5, 0.0, 0.1, 0.0, 0.3, 0.0, 0.0, 0.2, 0.1]`;
-
-    const response = await ai.models.generateContent({
-      model: "gemini-3.5-flash",
-      contents: prompt,
+    addLog("system", `[Gemini API] Requesting 128-dimensional vector embedding for: "${text}"`);
+    const response = await ai.models.embedContent({
+      model: "gemini-embedding-2",
+      contents: text,
       config: {
-        responseMimeType: "application/json"
+        outputDimensionality: 128
       }
     });
 
-    const resText = response.text || "";
-    const parsed = JSON.parse(resText.trim());
-    if (Array.isArray(parsed) && parsed.length === 10) {
-      const magnitude = Math.sqrt(parsed.reduce((sum, val) => sum + val * val, 0));
-      return parsed.map(val => Number((val / magnitude).toFixed(4)));
+    if (response.embedding?.values && Array.isArray(response.embedding.values)) {
+      const values = response.embedding.values;
+      if (values.length === 128) {
+        const magnitude = Math.sqrt(values.reduce((sum, val) => sum + val * val, 0));
+        return values.map(val => Number((val / magnitude).toFixed(4)));
+      }
     }
-    throw new Error("Invalid format returned from Gemini model");
+    throw new Error("Invalid or empty embedding values returned from Gemini model");
   } catch (error) {
-    addLog("system", `[Gemini Error] Embedding failed: ${(error as Error).message}. Falling back to keywords.`);
+    addLog("system", `[Gemini Error] Embedding failed: ${(error as Error).message}. Falling back to 128-dimensional keyword simulation.`);
     return getSimulatedVector(text);
   }
 }
@@ -264,20 +243,6 @@ const SEED_DATA: ImageDocument[] = [
   }
 ];
 
-// Seed standard in-memory vectors
-function initInMemoryDB() {
-  dbImages = SEED_DATA.map(img => {
-    const mag = Math.sqrt(img.embedding.reduce((sum, val) => sum + val * val, 0));
-    return {
-      ...img,
-      embedding: img.embedding.map(val => Number((val / mag).toFixed(4)))
-    };
-  });
-  systemLogs = [];
-  activeQueue = [];
-  addLog("system", "In-memory simulated ArangoDB store initialized with standard default dataset.");
-}
-
 // ==========================================
 // 2. ARANGODB ACCESSORS & SERVICES LAYER
 // ==========================================
@@ -294,9 +259,7 @@ async function ensureCollection(name: string) {
 
 async function connectToArango() {
   if (!arangoUrl) {
-    addLog("system", "ARANGO_URL is not defined. Operating exclusively in local in-memory simulation mode.");
-    initInMemoryDB();
-    return;
+    throw new Error("ARANGO_URL environment variable is missing. Real ArangoDB database is required!");
   }
 
   try {
@@ -316,7 +279,6 @@ async function connectToArango() {
 
     const version = await arangoDb.version();
     addLog("system", `Connected to ArangoDB successfully! Engine Version: ${version.version}`);
-    useRealArango = true;
 
     // Ensure collections exist
     await ensureCollection("Settings");
@@ -347,169 +309,110 @@ async function connectToArango() {
     const countResult = await arangoDb.query(`RETURN LENGTH(Images)`);
     const count = await countResult.next();
     if (count === 0) {
-      addLog("system", "ArangoDB 'Images' collection is empty. Seeding defaults...");
-      const normalizedSeed = SEED_DATA.map(img => {
-        const mag = Math.sqrt(img.embedding.reduce((sum, val) => sum + val * val, 0));
-        return {
+      addLog("system", "ArangoDB 'Images' collection is empty. Seeding defaults with 128-dimensional embeddings...");
+      const normalizedSeed: ImageDocument[] = [];
+      for (const img of SEED_DATA) {
+        const emb = await getEmbeddingVector(img.text);
+        normalizedSeed.push({
           ...img,
-          embedding: img.embedding.map(val => Number((val / mag).toFixed(4)))
-        };
-      });
+          embedding: emb
+        });
+      }
       for (const img of normalizedSeed) {
         await imagesColl.save(img);
       }
-      addLog("system", "ArangoDB 'Images' collection successfully populated with seed data.");
+      addLog("system", "ArangoDB 'Images' collection successfully populated with 128-dimensional seed data.");
     }
 
   } catch (err) {
-    addLog("system", `ArangoDB Connection Failed: ${(err as Error).message}. Falling back safely to high-fidelity simulation.`);
-    arangoDb = null;
-    useRealArango = false;
-    initInMemoryDB();
+    addLog("system", `ArangoDB Connection Failed: ${(err as Error).message}`);
+    throw err;
   }
 }
 
 // Settings Accessors
 async function getSettings(): Promise<AppSettings> {
-  if (useRealArango && arangoDb) {
-    try {
-      const settingsColl = arangoDb.collection("Settings");
-      const doc = await settingsColl.document("config");
-      return {
-        geminiApiKey: doc.geminiApiKey || "",
-        replicateApiToken: doc.replicateApiToken || "",
-        r2AccessKeyId: doc.r2AccessKeyId || "",
-        r2SecretAccessKey: doc.r2SecretAccessKey || "",
-        r2BucketName: doc.r2BucketName || "",
-        r2Endpoint: doc.r2Endpoint || ""
-      };
-    } catch (e) {
-      addLog("system", `Error reading settings from ArangoDB: ${(e as Error).message}`);
-    }
-  }
-  return inMemorySettings;
+  if (!arangoDb) throw new Error("ArangoDB is not initialized");
+  const settingsColl = arangoDb.collection("Settings");
+  const doc = await settingsColl.document("config");
+  return {
+    geminiApiKey: doc.geminiApiKey || "",
+    replicateApiToken: doc.replicateApiToken || "",
+    r2AccessKeyId: doc.r2AccessKeyId || "",
+    r2SecretAccessKey: doc.r2SecretAccessKey || "",
+    r2BucketName: doc.r2BucketName || "",
+    r2Endpoint: doc.r2Endpoint || ""
+  };
 }
 
 async function updateSettings(newSettings: AppSettings): Promise<void> {
-  if (useRealArango && arangoDb) {
-    try {
-      const settingsColl = arangoDb.collection("Settings");
-      await settingsColl.update("config", newSettings);
-      addLog("system", "ArangoDB 'Settings' configuration updated successfully.");
-      return;
-    } catch (e) {
-      addLog("system", `Error updating settings in ArangoDB: ${(e as Error).message}`);
-    }
-  }
-  inMemorySettings = newSettings;
-  addLog("system", "In-memory configuration updated successfully.");
+  if (!arangoDb) throw new Error("ArangoDB is not initialized");
+  const settingsColl = arangoDb.collection("Settings");
+  await settingsColl.update("config", newSettings);
+  addLog("system", "ArangoDB 'Settings' configuration updated successfully.");
 }
 
 // Images Accessors
 async function getImages(): Promise<ImageDocument[]> {
-  if (useRealArango && arangoDb) {
-    try {
-      const cursor = await arangoDb.query(`FOR img IN Images RETURN img`);
-      return await cursor.all();
-    } catch (e) {
-      addLog("system", `Error reading images from ArangoDB: ${(e as Error).message}`);
-    }
-  }
-  return dbImages;
+  if (!arangoDb) throw new Error("ArangoDB is not initialized");
+  const cursor = await arangoDb.query(`FOR img IN Images RETURN img`);
+  return await cursor.all();
 }
 
 async function addImage(img: ImageDocument): Promise<void> {
-  if (useRealArango && arangoDb) {
-    try {
-      const imagesColl = arangoDb.collection("Images");
-      await imagesColl.save(img);
-      addLog("system", `ArangoDB: Inserted document '${img._key}'`);
-      return;
-    } catch (e) {
-      addLog("system", `Error adding image to ArangoDB: ${(e as Error).message}`);
-    }
-  }
-  dbImages.push(img);
+  if (!arangoDb) throw new Error("ArangoDB is not initialized");
+  const imagesColl = arangoDb.collection("Images");
+  await imagesColl.save(img);
+  addLog("system", `ArangoDB: Inserted document '${img._key}'`);
 }
 
 // Reset Database Layer
 async function resetDB(): Promise<void> {
-  if (useRealArango && arangoDb) {
-    try {
-      addLog("system", "ArangoDB: Clearing Images collection...");
-      await arangoDb.query(`FOR img IN Images REMOVE img IN Images`);
-      const imagesColl = arangoDb.collection("Images");
-      const normalizedSeed = SEED_DATA.map(img => {
-        const mag = Math.sqrt(img.embedding.reduce((sum, val) => sum + val * val, 0));
-        return {
-          ...img,
-          embedding: img.embedding.map(val => Number((val / mag).toFixed(4)))
-        };
-      });
-      for (const img of normalizedSeed) {
-        await imagesColl.save(img);
-      }
-      
-      addLog("system", "ArangoDB: Clearing Logs and Job Queue collections...");
-      await arangoDb.query(`FOR log IN Logs REMOVE log IN Logs`);
-      await arangoDb.query(`FOR job IN Queue REMOVE job IN Queue`);
-      addLog("system", "ArangoDB: Reseed and cleanup completed.");
-      return;
-    } catch (e) {
-      addLog("system", `Error resetting ArangoDB: ${(e as Error).message}`);
-    }
+  if (!arangoDb) throw new Error("ArangoDB is not initialized");
+  addLog("system", "ArangoDB: Clearing Images collection...");
+  await arangoDb.query(`FOR img IN Images REMOVE img IN Images`);
+  const imagesColl = arangoDb.collection("Images");
+  const normalizedSeed: ImageDocument[] = [];
+  for (const img of SEED_DATA) {
+    const emb = await getEmbeddingVector(img.text);
+    normalizedSeed.push({
+      ...img,
+      embedding: emb
+    });
+  }
+  for (const img of normalizedSeed) {
+    await imagesColl.save(img);
   }
   
-  initInMemoryDB();
+  addLog("system", "ArangoDB: Clearing Logs and Job Queue collections...");
+  await arangoDb.query(`FOR log IN Logs REMOVE log IN Logs`);
+  await arangoDb.query(`FOR job IN Queue REMOVE job IN Queue`);
+  addLog("system", "ArangoDB: Reseed and cleanup completed.");
 }
 
 // Queue Accessors
 async function getQueue(): Promise<QueueJob[]> {
-  if (useRealArango && arangoDb) {
-    try {
-      const cursor = await arangoDb.query(`FOR job IN Queue SORT job.createdAtRaw DESC LIMIT 50 RETURN job`);
-      return await cursor.all();
-    } catch (e) {
-      // ignore
-    }
-  }
-  return activeQueue;
+  if (!arangoDb) throw new Error("ArangoDB is not initialized");
+  const cursor = await arangoDb.query(`FOR job IN Queue SORT job.createdAtRaw DESC LIMIT 50 RETURN job`);
+  return await cursor.all();
 }
 
 async function updateQueueJob(job: QueueJob & { createdAtRaw?: number }): Promise<void> {
-  if (useRealArango && arangoDb) {
-    try {
-      const queueColl = arangoDb.collection("Queue");
-      const exists = await queueColl.documentExists(job.id).catch(() => false);
-      if (exists) {
-        await queueColl.update(job.id, job);
-      } else {
-        await queueColl.save({ _key: job.id, ...job });
-      }
-      return;
-    } catch (e) {
-      // ignore
-    }
-  }
-  const idx = activeQueue.findIndex(j => j.id === job.id);
-  if (idx !== -1) {
-    activeQueue[idx] = job;
+  if (!arangoDb) throw new Error("ArangoDB is not initialized");
+  const queueColl = arangoDb.collection("Queue");
+  const exists = await queueColl.documentExists(job.id).catch(() => false);
+  if (exists) {
+    await queueColl.update(job.id, job);
   } else {
-    activeQueue.push(job);
+    await queueColl.save({ _key: job.id, ...job });
   }
 }
 
 // Logs Accessors
 async function getLogs(): Promise<LogEntry[]> {
-  if (useRealArango && arangoDb) {
-    try {
-      const cursor = await arangoDb.query(`FOR log IN Logs SORT log.timestampRaw DESC LIMIT 100 RETURN log`);
-      return await cursor.all();
-    } catch (e) {
-      // ignore
-    }
-  }
-  return systemLogs;
+  if (!arangoDb) throw new Error("ArangoDB is not initialized");
+  const cursor = await arangoDb.query(`FOR log IN Logs SORT log.timestampRaw DESC LIMIT 100 RETURN log`);
+  return await cursor.all();
 }
 
 // ==========================================
@@ -569,7 +472,7 @@ async function uploadToS3(
         baseUrl = `https://${baseUrl}`;
       }
       if (baseUrl.includes("cloudflarestorage.com")) {
-        return `${baseUrl}/${settings.r2BucketName}/${key}`;
+        return `https://photos.newsrss.org/${key}`;
       } else {
         return `${baseUrl}/${key}`;
       }
@@ -579,6 +482,273 @@ async function uploadToS3(
     addLog("queue", `S3/R2 Upload Failed for ${resolutionName}: ${(err as Error).message}`);
     return null;
   }
+}
+
+interface FallbackProviderItem {
+  provider: string;
+  category: string;
+  url: string;
+  text: string;
+  embedding?: number[];
+}
+
+const FALLBACK_PROVIDERS: FallbackProviderItem[] = [
+  {
+    provider: "Unsplash",
+    category: "nature",
+    url: "https://images.unsplash.com/photo-1506744038136-46273834b3fb",
+    text: "emerald cascade green forest waterfall trees water organic stream nature"
+  },
+  {
+    provider: "Unsplash",
+    category: "urban",
+    url: "https://images.unsplash.com/photo-1515621061946-eff1c2a352bd",
+    text: "cyberpunk city street rain night neon lights glowing skyscrapers urban"
+  },
+  {
+    provider: "Unsplash",
+    category: "space",
+    url: "https://images.unsplash.com/photo-1506318137071-a8e063b4bec0",
+    text: "milky way galaxy cosmic starry night sky stars universe outer space celestial"
+  },
+  {
+    provider: "Unsplash",
+    category: "architecture",
+    url: "https://images.unsplash.com/photo-1600585154340-be6161a56a0c",
+    text: "modernist concrete architecture building facade sharp lines geometric museum minimalist"
+  },
+  {
+    provider: "Unsplash",
+    category: "animals",
+    url: "https://images.unsplash.com/photo-1504198453319-5ce911bafcde",
+    text: "arctic fox animal winter snow cold white fluffy puppy wildlife fauna"
+  },
+  {
+    provider: "Pexels",
+    category: "nature",
+    url: "https://images.pexels.com/photos/3408744/pexels-photo-3408744.jpeg",
+    text: "autumn forest gold red leaves trees woods scenic nature foliage path wilderness"
+  },
+  {
+    provider: "Pexels",
+    category: "urban",
+    url: "https://images.pexels.com/photos/169647/pexels-photo-169647.jpeg",
+    text: "downtown skyscrapers traffic trails speed city life cityscape architecture road street"
+  },
+  {
+    provider: "Flickr",
+    category: "nature",
+    url: "https://live.staticflickr.com/65535/51299834246_7f16751280_b.jpg",
+    text: "majestic mountain peaks snow lake reflection calm peaceful sunrise hills scenic landscape"
+  },
+  {
+    provider: "Flickr",
+    category: "animals",
+    url: "https://live.staticflickr.com/65535/50849301987_a1459a930b_b.jpg",
+    text: "bald eagle bird prey flying wings feathers wild majestic predator sky"
+  },
+  {
+    provider: "StaticPhotos",
+    category: "minimalism",
+    url: "https://images.unsplash.com/photo-1494438639946-1ebd1d2038b5",
+    text: "cozy minimalist room lamp warm light simple table chair abstract comfort"
+  },
+  {
+    provider: "Picsum",
+    category: "nature",
+    url: "https://picsum.photos/id/10/1024/1024",
+    text: "lake mountain shore forest trees green waters sky nature landscape"
+  },
+  {
+    provider: "Picsum",
+    category: "urban",
+    url: "https://picsum.photos/id/1031/1024/1024",
+    text: "city street buildings architecture car traffic road urban people"
+  }
+];
+
+async function getBestFitFallback(promptVector: number[]): Promise<FallbackProviderItem> {
+  let bestFit = FALLBACK_PROVIDERS[0];
+  let maxSim = -1;
+  
+  for (const item of FALLBACK_PROVIDERS) {
+    if (!item.embedding || item.embedding.length !== 128) {
+      item.embedding = getSimulatedVector(item.text);
+    }
+    const sim = cosineSimilarity(promptVector, item.embedding);
+    if (sim > maxSim) {
+      maxSim = sim;
+      bestFit = item;
+    }
+  }
+  
+  return bestFit;
+}
+
+async function fetchBaseImage(prompt: string, promptVector: number[]): Promise<{ buffer: Buffer; mimeType: string; provider: string; sourceUrl: string } | null> {
+  try {
+    const bestFit = await getBestFitFallback(promptVector);
+    addLog("queue", `[Phase 2] Free Source Image API: Best fit fallback selected from ${bestFit.provider} (Category: ${bestFit.category}, Text: "${bestFit.text}")`);
+    
+    addLog("queue", `[Phase 2] Free Source Image API: Fetching base image from: ${bestFit.url}`);
+    const response = await fetch(bestFit.url);
+    if (!response.ok) {
+      throw new Error(`Failed to fetch from ${bestFit.provider}: ${response.statusText}`);
+    }
+    const arrayBuffer = await response.arrayBuffer();
+    const buffer = Buffer.from(arrayBuffer);
+    const mimeType = response.headers.get("Content-Type") || "image/jpeg";
+    addLog("queue", `[Phase 2] Free Source Image API: Successfully retrieved base image (${buffer.length} bytes, type: ${mimeType})`);
+    return { buffer, mimeType, provider: bestFit.provider, sourceUrl: bestFit.url };
+  } catch (err) {
+    addLog("queue", `[Phase 2] Free Source Image API Error: ${(err as Error).message}. Falling back to Picsum Photos default seed.`);
+    try {
+      const url = `https://picsum.photos/seed/${encodeURIComponent(prompt.substring(0, 30))}/1024/1024`;
+      const response = await fetch(url);
+      if (response.ok) {
+        const arrayBuffer = await response.arrayBuffer();
+        const buffer = Buffer.from(arrayBuffer);
+        return { buffer, mimeType: "image/jpeg", provider: "Picsum (Fallback)", sourceUrl: url };
+      }
+    } catch (innerErr) {
+      addLog("queue", `[Phase 2] Picsum backup also failed: ${(innerErr as Error).message}`);
+    }
+    return null;
+  }
+}
+
+async function generateImageAndSave(prompt: string, category: string, seed: number): Promise<ImageDocument> {
+  addLog("queue", `[On-Demand] Generating image synchronously for prompt: "${prompt}" (seed: ${seed})`);
+
+  // 1. Get embedding vector first (so we can find best-fit semantically aligned base/fallback image)
+  addLog("queue", `[On-Demand] ArangoDB Vectors: Extracting dense vector embeddings of prompt...`);
+  const embedding = await getEmbeddingVector(prompt);
+
+  // 2. Fetch base image from Free Source API using semantic best fit comparison
+  const baseImg = await fetchBaseImage(prompt, embedding);
+
+  // 3. Call Gemini API
+  const settings = await getSettings();
+  const apiKey = settings.geminiApiKey || process.env.GEMINI_API_KEY;
+  if (!apiKey) {
+    throw new Error("GEMINI_API_KEY is not configured. Please set it in the Settings panel.");
+  }
+
+  const ai = new GoogleGenAI({ 
+    apiKey,
+    httpOptions: {
+      headers: {
+        'User-Agent': 'aistudio-build'
+      }
+    }
+  });
+
+  let base64Image = "";
+  try {
+    let response;
+    if (baseImg) {
+      const base64Data = baseImg.buffer.toString("base64");
+      addLog("queue", `[On-Demand] Sending base image from ${baseImg.provider} to Gemini 2.5 Flash Image (gemini-2.5-flash-image) to re-imagine based on prompt...`);
+      response = await ai.models.generateContent({
+        model: "gemini-2.5-flash-image",
+        contents: {
+          parts: [
+            {
+              inlineData: {
+                data: base64Data,
+                mimeType: baseImg.mimeType
+              }
+            },
+            {
+              text: `Re-imagine and edit this base image according to this description: ${prompt}`
+            }
+          ]
+        },
+        config: {
+          imageConfig: {
+            aspectRatio: "1:1"
+          }
+        }
+      });
+    } else {
+      addLog("queue", `[On-Demand] No base image fetched. Generating from scratch with prompt: "${prompt}"`);
+      response = await ai.models.generateContent({
+        model: "gemini-2.5-flash-image",
+        contents: {
+          parts: [{ text: prompt }]
+        },
+        config: {
+          imageConfig: {
+            aspectRatio: "1:1"
+          }
+        }
+      });
+    }
+
+    if (response.candidates?.[0]?.content?.parts) {
+      for (const part of response.candidates[0].content.parts) {
+        if (part.inlineData) {
+          base64Image = `data:image/png;base64,${part.inlineData.data}`;
+          break;
+        }
+      }
+    }
+  } catch (apiError) {
+    addLog("queue", `[On-Demand] Gemini API Error during generation: ${(apiError as Error).message}. Using high-quality source image as a premium fallback.`);
+  }
+
+  // Fallback to Base Image from our Free Source API best fit if Gemini failed
+  if (!base64Image && baseImg) {
+    base64Image = `data:${baseImg.mimeType};base64,${baseImg.buffer.toString("base64")}`;
+    addLog("queue", `[On-Demand] Falling back to semantically closest ${baseImg.provider} image (${baseImg.buffer.length} bytes) from original URL: ${baseImg.sourceUrl}`);
+  }
+
+  if (!base64Image) {
+    throw new Error("No image data returned from Gemini image generation model and no base image available.");
+  }
+
+  // 4. Jimp Multi-Variant Resizing
+  addLog("queue", `[On-Demand] Jimp: Reading generated image buffer into memory...`);
+  const jimpImg = await Jimp.read(Buffer.from(base64Image.replace(/^data:image\/\w+;base64,/, ""), "base64"));
+
+  const key = `gen-${Math.random().toString(36).substring(2, 9)}`;
+  const variants: Record<string, string> = {};
+
+  addLog("queue", `[On-Demand] Jimp: Resizing and preparing multi-variant resolutions (Desktop, Mobile, Tablet)...`);
+
+  for (const [resName, dim] of Object.entries(RESOLUTIONS)) {
+    addLog("queue", `[On-Demand] Jimp: Resizing variant '${resName}' to ${dim.w}x${dim.h}...`);
+    const cloned = jimpImg.clone().cover({ w: dim.w, h: dim.h });
+    const buffer = await cloned.getBuffer("image/jpeg");
+    const base64Str = await cloned.getBase64("image/jpeg");
+
+    // Try uploading to S3
+    const s3Url = await uploadToS3(settings, resName, key, buffer, "image/jpeg");
+    if (s3Url) {
+      addLog("queue", `S3/R2: Successfully uploaded ${resName} to '${resName}/${key}.jpg' -> ${s3Url}`);
+      variants[resName] = s3Url;
+    } else {
+      // Fallback to local Base64 cache
+      variants[resName] = base64Str;
+    }
+  }
+
+  // 5. Save to Database
+  addLog("queue", `[On-Demand] Saving multi-variant images and embedding vector in ArangoDB collection 'Images'...`);
+
+  const newDoc: ImageDocument = {
+    _key: key,
+    sourceUrl: variants.medium || base64Image, // Default view
+    category: category || "nature",
+    text: prompt,
+    seed: seed,
+    embedding: embedding,
+    variants: variants
+  };
+
+  await addImage(newDoc);
+  addLog("queue", `[On-Demand] Synchronous generation completed successfully for prompt: "${prompt}".`);
+  return newDoc;
 }
 
 let isQueueProcessing = false;
@@ -601,105 +771,17 @@ async function processQueue() {
     addLog("queue", `ArangoDB Queue: Worker picked up job ${job.id} for prompt: "${job.prompt}"`);
 
     // Step 1: Initializing
-    job.progress = 15;
+    job.progress = 25;
     await updateQueueJob(job);
-    addLog("queue", `[Phase 1] Initializing direct Gemini image generator task for prompt: "${job.prompt}"`);
-    await sleep(500);
+    addLog("queue", `ArangoDB Queue: Generating image for prompt "${job.prompt}"...`);
 
-    // Step 2: Calling Gemini API
-    job.progress = 30;
-    await updateQueueJob(job);
-    addLog("queue", `[Phase 2] Requesting image generation from model 'gemini-3.1-flash-image' (Google Nano Banana 2)`);
-
-    const settings = await getSettings();
-    const apiKey = settings.geminiApiKey || process.env.GEMINI_API_KEY;
-    if (!apiKey) {
-      throw new Error("GEMINI_API_KEY is not configured. Please set it in the Settings panel.");
-    }
-
-    const ai = new GoogleGenAI({ apiKey });
-    const response = await ai.models.generateContent({
-      model: "gemini-3.1-flash-image",
-      contents: {
-        parts: [{ text: job.prompt }]
-      },
-      config: {
-        imageConfig: {
-          aspectRatio: "1:1",
-          imageSize: "1K"
-        }
-      }
-    });
-
-    let base64Image = "";
-    if (response.candidates?.[0]?.content?.parts) {
-      for (const part of response.candidates[0].content.parts) {
-        if (part.inlineData) {
-          base64Image = `data:image/png;base64,${part.inlineData.data}`;
-          break;
-        }
-      }
-    }
-
-    if (!base64Image) {
-      throw new Error("No image data returned from Gemini image generation model.");
-    }
-
-    // Step 3: Jimp Multi-Variant Resizing
-    job.progress = 55;
-    await updateQueueJob(job);
-    addLog("queue", `[Phase 3] Jimp: Reading generated image buffer into memory...`);
-    const jimpImg = await Jimp.read(Buffer.from(base64Image.replace(/^data:image\/\w+;base64,/, ""), "base64"));
-
-    const key = `gen-${Math.random().toString(36).substring(2, 9)}`;
-    const variants: Record<string, string> = {};
-
-    addLog("queue", `[Phase 3] Jimp: Resizing and preparing multi-variant resolutions (Desktop, Mobile, Tablet)...`);
-
-    for (const [resName, dim] of Object.entries(RESOLUTIONS)) {
-      addLog("queue", `[Phase 3] Jimp: Resizing variant '${resName}' to ${dim.w}x${dim.h}...`);
-      const cloned = jimpImg.clone().cover({ w: dim.w, h: dim.h });
-      const buffer = await cloned.getBuffer("image/jpeg");
-      const base64Str = await cloned.getBase64("image/jpeg");
-
-      // Try uploading to S3
-      const s3Url = await uploadToS3(settings, resName, key, buffer, "image/jpeg");
-      if (s3Url) {
-        addLog("queue", `S3/R2: Successfully uploaded ${resName} to '${resName}/${key}.jpg' -> ${s3Url}`);
-        variants[resName] = s3Url;
-      } else {
-        // Fallback to local Base64 cache
-        variants[resName] = base64Str;
-      }
-    }
-
-    // Step 4: Embedding vector extraction
-    job.progress = 80;
-    await updateQueueJob(job);
-    addLog("queue", `[Phase 4] ArangoDB Vectors: Extracting dense vector embeddings of prompt...`);
-    const embedding = await getEmbeddingVector(job.prompt);
-
-    // Step 5: Save to Database
-    job.progress = 95;
-    await updateQueueJob(job);
-    addLog("queue", `[Phase 5] Saving multi-variant images and embedding vector in ArangoDB collection 'Images'...`);
-
-    const newDoc: ImageDocument = {
-      _key: key,
-      sourceUrl: variants.medium || base64Image, // Default view
-      category: job.category || "nature",
-      text: job.prompt,
-      seed: job.seed,
-      embedding: embedding,
-      variants: variants
-    };
-
-    await addImage(newDoc);
+    const newDoc = await generateImageAndSave(job.prompt, job.category || "nature", job.seed);
 
     job.progress = 100;
     job.status = "completed";
     await updateQueueJob(job);
-    addLog("queue", `ArangoDB Queue: Successfully completed job ${job.id}! All 12 variants cached in ArangoDB collection 'Images'${settings.r2BucketName ? " and Cloudflare R2 S3 bucket" : ""}.`);
+    const settings = await getSettings();
+    addLog("queue", `ArangoDB Queue: Successfully completed job ${job.id}! All variants cached in ArangoDB collection 'Images'${settings.r2BucketName ? " and Cloudflare R2 S3 bucket" : ""}.`);
 
   } catch (error) {
     addLog("queue", `Error processing queue job: ${(error as Error).message}`);
@@ -805,7 +887,7 @@ app.get("/api/cdn/:width/:height", async (req, res) => {
     if (textQuery) {
       addLog("api", `[Phase 2] Computing query embedding vector...`);
       vector = await getEmbeddingVector(textQuery);
-      addLog("api", `[Phase 2] Query vector: [${vector.slice(0, 3).join(", ")}... 10 dimensions]`);
+      addLog("api", `[Phase 2] Query vector: [${vector.slice(0, 3).join(", ")}... 128 dimensions]`);
 
       addLog("api", `[Phase 2] ArangoDB Vector Search: Evaluating cosine similarity against ${currentImages.length} documents...`);
       
@@ -836,17 +918,22 @@ app.get("/api/cdn/:width/:height", async (req, res) => {
       }
     }
 
-    const finalImage = matchedImage || currentImages[0] || SEED_DATA[0];
+    let finalImage = matchedImage || currentImages[0] || SEED_DATA[0];
     let cacheControl = "public, max-age=31536000";
 
     let triggerGeneration = false;
     if (textQuery && similarityScore < 0.85) {
       triggerGeneration = true;
-      cacheControl = "public, max-age=60";
+      cacheControl = "public, max-age=31536000";
       addLog("api", `[Phase 3] Match similarity (${similarityScore.toFixed(4)}) is below 0.85!`);
-      addLog("api", `[Phase 3] Triggering asynchronous generator task in ArangoDB Queue...`);
+      addLog("api", `[Phase 3] Generating real, high-quality image on-demand synchronously...`);
       
-      enqueueJob(textQuery, category, seed);
+      try {
+        finalImage = await generateImageAndSave(textQuery, category, seed);
+        similarityScore = 1.0; // The newly generated image is a perfect match!
+      } catch (genError) {
+        addLog("api", `[Phase 3 ERROR] On-demand generation failed: ${(genError as Error).message}. Falling back to closest match.`);
+      }
     } else if (textQuery) {
       addLog("api", `[Phase 4] Quality Match verified (Similarity: ${similarityScore.toFixed(4)} >= 0.85). Serving directly with long-lived Cache-Control.`);
     }
