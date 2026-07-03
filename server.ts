@@ -185,11 +185,15 @@ function getSimulatedVector(text: string): number[] {
 
 // Perform real Gemini vector embedding using gemini-embedding-2 (128 dims)
 async function getEmbeddingVector(text: string): Promise<number[]> {
+  const cached = getCachedEmbedding(text);
+  if (cached) return cached;
+
   const settings = await getSettings();
   const geminiKey = settings.geminiApiKey || process.env.GEMINI_API_KEY;
   if (!geminiKey || geminiKey === "MY_GEMINI_API_KEY") {
-    // Fallback to local 128-dimensional keyword-based semantic vectorizer
-    return getSimulatedVector(text);
+    const vec = getSimulatedVector(text);
+    setCachedEmbedding(text, vec);
+    return vec;
   }
 
   try {
@@ -209,13 +213,17 @@ async function getEmbeddingVector(text: string): Promise<number[]> {
 
     if (Array.isArray(values) && values.length > 0) {
       const magnitude = Math.sqrt(values.reduce((sum: number, val: number) => sum + val * val, 0));
-      return values.map((val: number) => Number((val / magnitude).toFixed(4)));
+      const vec = values.map((val: number) => Number((val / magnitude).toFixed(4)));
+      setCachedEmbedding(text, vec);
+      return vec;
     }
     addLog("system", `[Gemini Debug] response keys: ${Object.keys(response).join(", ")}`);
     throw new Error(`Invalid or empty embedding values returned from Gemini model (got ${JSON.stringify(values)?.slice(0, 100)})`);
   } catch (error) {
     addLog("system", `[Gemini Error] Embedding failed: ${(error as Error).message}. Falling back to 128-dimensional keyword simulation.`);
-    return getSimulatedVector(text);
+    const vec = getSimulatedVector(text);
+    setCachedEmbedding(text, vec);
+    return vec;
   }
 }
 
@@ -406,23 +414,93 @@ async function updateSettings(newSettings: AppSettings): Promise<void> {
   addLog("system", "ArangoDB 'Settings' configuration updated successfully.");
 }
 
+// ==========================================
+// IN-MEMORY LRU CACHE (images + embeddings)
+// ==========================================
+
+const IMAGES_CACHE_TTL = 5000; // 5s
+let imagesCacheData: ImageDocument[] | null = null;
+let imagesCacheExpiry = 0;
+
+function invalidateImagesCache() {
+  imagesCacheData = null;
+  imagesCacheExpiry = 0;
+}
+
+const EMBED_CACHE = new Map<string, { vec: number[]; ts: number }>();
+const EMBED_CACHE_TTL = 3600_000; // 1h — embeddings are deterministic, safe to cache long
+const EMBED_CACHE_MAX = 500;
+
+function getCachedEmbedding(text: string): number[] | null {
+  const entry = EMBED_CACHE.get(text);
+  if (!entry) return null;
+  if (Date.now() - entry.ts > EMBED_CACHE_TTL) { EMBED_CACHE.delete(text); return null; }
+  return entry.vec;
+}
+
+function setCachedEmbedding(text: string, vec: number[]) {
+  if (EMBED_CACHE.size >= EMBED_CACHE_MAX) {
+    // evict oldest
+    const oldest = [...EMBED_CACHE.entries()].sort((a, b) => a[1].ts - b[1].ts)[0];
+    if (oldest) EMBED_CACHE.delete(oldest[0]);
+  }
+  EMBED_CACHE.set(text, { vec, ts: Date.now() });
+}
+
 // Images Accessors
 async function getImages(): Promise<ImageDocument[]> {
   if (!arangoDb) throw new Error("ArangoDB is not initialized");
+  if (imagesCacheData && Date.now() < imagesCacheExpiry) return imagesCacheData;
   const cursor = await arangoDb.query(`FOR img IN Images RETURN img`);
-  return await cursor.all();
+  imagesCacheData = await cursor.all();
+  imagesCacheExpiry = Date.now() + IMAGES_CACHE_TTL;
+  return imagesCacheData;
 }
 
 async function addImage(img: ImageDocument): Promise<void> {
   if (!arangoDb) throw new Error("ArangoDB is not initialized");
   const imagesColl = arangoDb.collection("Images");
   await imagesColl.save(img);
+  invalidateImagesCache();
   addLog("system", `ArangoDB: Inserted document '${img._key}'`);
+}
+
+// Vector index search — uses APPROX_NEAR_COSINE, falls back to JS cosine scan
+async function findClosestImage(queryVec: number[], allImages: ImageDocument[]): Promise<{ image: ImageDocument; similarity: number } | null> {
+  if (!arangoDb) return null;
+  try {
+    const cursor = await arangoDb.query({
+      query: `
+        FOR img IN Images
+          LET score = APPROX_NEAR_COSINE(img.embedding, @vec)
+          SORT score DESC
+          LIMIT 1
+          RETURN MERGE(img, { _score: score })
+      `,
+      bindVars: { vec: queryVec }
+    });
+    const result = await cursor.next() as (ImageDocument & { _score: number }) | undefined;
+    if (result) {
+      return { image: result, similarity: result._score };
+    }
+  } catch (err) {
+    addLog("system", `[VectorIndex] APPROX_NEAR_COSINE failed, falling back to JS scan: ${(err as Error).message}`);
+  }
+
+  // JS fallback cosine scan
+  let best: ImageDocument | null = null;
+  let maxSim = -1;
+  for (const img of allImages) {
+    const sim = cosineSimilarity(queryVec, img.embedding);
+    if (sim > maxSim) { maxSim = sim; best = img; }
+  }
+  return best ? { image: best, similarity: maxSim } : null;
 }
 
 // Reset Database Layer
 async function resetDB(): Promise<void> {
   if (!arangoDb) throw new Error("ArangoDB is not initialized");
+  invalidateImagesCache();
   addLog("system", "ArangoDB: Clearing Images collection...");
   await arangoDb.query(`FOR img IN Images REMOVE img IN Images`);
   const imagesColl = arangoDb.collection("Images");
@@ -491,29 +569,41 @@ const RESOLUTIONS: Record<string, { w: number; h: number }> = {
 };
 
 async function compressImage(buffer: Buffer, mimeType: string): Promise<Buffer> {
+  // Use sharp inline — fast, no network round-trip
+  try {
+    const compressed = await sharp(buffer).jpeg({ quality: 82, mozjpeg: true }).toBuffer();
+    addLog("queue", `[Compress] sharp: ${buffer.length} → ${compressed.length} bytes (${Math.round((1 - compressed.length / buffer.length) * 100)}% saved)`);
+    return compressed;
+  } catch (err) {
+    addLog("queue", `[Compress] sharp failed: ${(err as Error).message}. Using original buffer.`);
+    return buffer;
+  }
+}
+
+// Async resmush.it post-processing — further optimizes already-uploaded S3 object (fire-and-forget)
+async function reoptimizeViaResmush(s3Url: string, settings: AppSettings, resName: string, key: string): Promise<void> {
+  if (!s3Url.startsWith("http")) return;
   try {
     const formData = new FormData();
-    const blob = new Blob([buffer], { type: mimeType });
+    const imgRes = await fetch(s3Url, { signal: AbortSignal.timeout(15000) });
+    if (!imgRes.ok) return;
+    const blob = new Blob([await imgRes.arrayBuffer()], { type: "image/jpeg" });
     formData.append("files", blob, "image.jpg");
 
-    const res = await fetch("https://api.resmush.it/ws.php?qlty=82", {
-      method: "POST",
-      body: formData,
-      signal: AbortSignal.timeout(15000)
-    });
-
-    if (!res.ok) throw new Error(`resmush.it HTTP ${res.status}`);
+    const res = await fetch("https://api.resmush.it/ws.php?qlty=82", { method: "POST", body: formData, signal: AbortSignal.timeout(15000) });
+    if (!res.ok) return;
     const json = await res.json() as any;
-    if (!json?.dest) throw new Error("resmush.it: no dest URL in response");
+    if (!json?.dest) return;
 
-    const compressed = await fetch(json.dest, { signal: AbortSignal.timeout(15000) });
-    if (!compressed.ok) throw new Error(`resmush.it download failed: ${compressed.status}`);
-    const compressedBuffer = Buffer.from(await compressed.arrayBuffer());
-    addLog("queue", `[Compress] resmush.it: ${buffer.length} → ${compressedBuffer.length} bytes (${Math.round((1 - compressedBuffer.length / buffer.length) * 100)}% saved)`);
-    return compressedBuffer;
-  } catch (err) {
-    addLog("queue", `[Compress] resmush.it failed: ${(err as Error).message}. Using original buffer.`);
-    return buffer;
+    const optimized = await fetch(json.dest, { signal: AbortSignal.timeout(15000) });
+    if (!optimized.ok) return;
+    const optimizedBuffer = Buffer.from(await optimized.arrayBuffer());
+
+    // Re-upload optimized version to same S3 key
+    await uploadToS3(settings, resName, key, optimizedBuffer, "image/jpeg");
+    addLog("queue", `[Compress] resmush.it async re-optimized ${resName}/${key}: ${(await imgRes.arrayBuffer()).byteLength} → ${optimizedBuffer.length} bytes`);
+  } catch {
+    // silently ignore — background optimization
   }
 }
 
@@ -951,23 +1041,36 @@ async function generateImageAndSave(prompt: string, category: string, seed: numb
 
   for (const [resName, dim] of Object.entries(RESOLUTIONS)) {
     addLog("queue", `[On-Demand] Jimp: Resizing variant '${resName}' to ${dim.w}x${dim.h}...`);
-    // cover: scale to fill entire target box (crops excess) — correct for CDN wallpapers
     const cloned = jimpImg.clone().cover({ w: dim.w, h: dim.h });
     const rawBuffer = await cloned.getBuffer("image/jpeg", { quality: 85 });
     const base64Str = await cloned.getBase64("image/jpeg");
 
-    // Compress before upload
-    const buffer = await compressImage(rawBuffer, "image/jpeg");
+    // Compress jpg before upload
+    const jpgBuffer = await compressImage(rawBuffer, "image/jpeg");
 
-    // Try uploading to S3
-    const s3Url = await uploadToS3(settings, resName, key, buffer, "image/jpeg");
-    if (s3Url) {
-      addLog("queue", `S3/R2: Successfully uploaded ${resName} to '${resName}/${key}.jpg' -> ${s3Url}`);
-      variants[resName] = s3Url;
+    // Pre-generate webp + png variants (eliminates on-demand fetch+convert overhead)
+    const [webpBuffer, pngBuffer] = await Promise.all([
+      convertBuffer(jpgBuffer, "webp"),
+      convertBuffer(jpgBuffer, "png")
+    ]);
+
+    // Upload all three formats in parallel
+    const [jpgUrl, webpUrl, pngUrl] = await Promise.all([
+      uploadToS3(settings, resName, key, jpgBuffer, "image/jpeg"),
+      uploadToS3(settings, `${resName}_webp`, key, webpBuffer, "image/webp"),
+      uploadToS3(settings, `${resName}_png`, key, pngBuffer, "image/png")
+    ]);
+
+    if (jpgUrl) {
+      addLog("queue", `S3/R2: Uploaded ${resName} jpg/webp/png -> ${jpgUrl}`);
+      variants[resName] = jpgUrl;
+      // Fire-and-forget async resmush re-optimization
+      reoptimizeViaResmush(jpgUrl, settings, resName, key).catch(() => {});
     } else {
-      // Fallback to local Base64 cache
       variants[resName] = base64Str;
     }
+    if (webpUrl) variants[`${resName}_webp`] = webpUrl;
+    if (pngUrl) variants[`${resName}_png`] = pngUrl;
   }
 
   // 5. Save to Database
@@ -1127,23 +1230,11 @@ app.get("/api/cdn/:width/:height", async (req, res) => {
       vector = await getEmbeddingVector(textQuery);
       addLog("api", `[Phase 2] Query vector: [${vector.slice(0, 3).join(", ")}... 128 dimensions]`);
 
-      addLog("api", `[Phase 2] ArangoDB Vector Search: Evaluating cosine similarity against ${currentImages.length} documents...`);
-      
-      // Find closest matches
-      let bestMatch: ImageDocument | null = null;
-      let maxSim = -1;
-
-      currentImages.forEach(img => {
-        const sim = cosineSimilarity(vector, img.embedding);
-        if (sim > maxSim) {
-          maxSim = sim;
-          bestMatch = img;
-        }
-      });
-
-      matchedImage = bestMatch;
-      similarityScore = maxSim;
-      addLog("api", `[Phase 2] Closest Match: "${bestMatch?.text}" | Cosine Similarity Score: ${similarityScore.toFixed(4)}`);
+      addLog("api", `[Phase 2] ArangoDB Vector Index: APPROX_NEAR_COSINE search across ${currentImages.length} documents...`);
+      const closest = await findClosestImage(vector, currentImages);
+      matchedImage = closest?.image || null;
+      similarityScore = closest?.similarity || 0;
+      addLog("api", `[Phase 2] Closest Match: "${matchedImage?.text}" | Cosine Similarity Score: ${similarityScore.toFixed(4)}`);
     } else {
       // Category and Seed match
       addLog("api", `[Phase 2] Searching by category: "${category}" and seed: ${seed}`);
@@ -1162,23 +1253,23 @@ app.get("/api/cdn/:width/:height", async (req, res) => {
     let triggerGeneration = false;
     if (textQuery && similarityScore < 0.85) {
       triggerGeneration = true;
-      cacheControl = "public, max-age=31536000";
-      addLog("api", `[Phase 3] Match similarity (${similarityScore.toFixed(4)}) is below 0.85!`);
-      addLog("api", `[Phase 3] Generating real, high-quality image on-demand synchronously...`);
-      
-      try {
-        finalImage = await generateImageAndSave(textQuery, category, seed);
-        similarityScore = 1.0; // The newly generated image is a perfect match!
-      } catch (genError) {
-        addLog("api", `[Phase 3 ERROR] On-demand generation failed: ${(genError as Error).message}. Falling back to closest match.`);
-      }
+      addLog("api", `[Phase 3] Match similarity (${similarityScore.toFixed(4)}) below 0.85 — serving best match immediately, generating in background (stale-while-revalidate).`);
+      // Return best match now — do NOT block response on generation
+      cacheControl = "public, max-age=60, stale-while-revalidate=86400";
+      // Background generation — updates DB so next request gets the real image
+      generateImageAndSave(textQuery, category, seed)
+        .then(() => addLog("api", `[Phase 3] Background generation complete for: "${textQuery}"`))
+        .catch(err => addLog("api", `[Phase 3 ERROR] Background generation failed: ${(err as Error).message}`));
     } else if (textQuery) {
       addLog("api", `[Phase 4] Quality Match verified (Similarity: ${similarityScore.toFixed(4)} >= 0.85). Serving directly with long-lived Cache-Control.`);
     }
 
     res.setHeader("Cache-Control", cacheControl);
+    res.setHeader("Vary", "Accept");  // allow CDN to cache separate jpg/webp/png per Accept header if used
+    res.setHeader("ETag", `"${finalImage._key}-${outputFormat}"`);
     res.setHeader("X-Similarity-Score", similarityScore.toString());
     res.setHeader("X-Async-Generated", triggerGeneration ? "true" : "false");
+    res.setHeader("X-Image-Key", finalImage._key);
 
     if (format === "blurhash") {
       addLog("api", `[Phase 4] Format requested: blurhash. Running native Wasm/TS Blurhash encoder...`);
@@ -1221,10 +1312,18 @@ app.get("/api/cdn/:width/:height", async (req, res) => {
         if (diff < minDiff) { minDiff = diff; bestVariantName = resName; }
       }
 
+      // Check for pre-generated format variant first (zero conversion overhead)
+      const fmtKey = outputFormat === "jpg" ? bestVariantName : `${bestVariantName}_${outputFormat}`;
+      const preGenUrl = finalImage.variants[fmtKey];
+      if (preGenUrl && (preGenUrl.startsWith("http") || preGenUrl.startsWith("s3://"))) {
+        addLog("api", `[Phase 4] Delivery: 302 → pre-generated ${outputFormat} '${fmtKey}' -> ${preGenUrl}`);
+        res.setHeader("Content-Type", OUTPUT_MIME[outputFormat]);
+        return res.redirect(302, preGenUrl);
+      }
+
       const servedData = finalImage.variants[bestVariantName] || finalImage.variants.medium || finalImage.variants.original;
 
       if (servedData) {
-        // Decode raw buffer from base64 data URI or fetch from S3/CDN URL
         let rawBuffer: Buffer | null = null;
 
         if (servedData.startsWith("data:")) {
@@ -1232,11 +1331,9 @@ app.get("/api/cdn/:width/:height", async (req, res) => {
           if (matches) rawBuffer = Buffer.from(matches[1], "base64");
         } else if (servedData.startsWith("http") || servedData.startsWith("s3://")) {
           if (outputFormat !== "jpg") {
-            // Need to fetch and convert — can't redirect for format transform
             rawBuffer = await fetchAndConvert(servedData, outputFormat);
           } else {
-            // Native JPEG stored in S3 — just redirect, no conversion needed
-            addLog("api", `[Phase 4] Delivery: 302 → S3/R2 '${bestVariantName}' (${outputFormat}) -> ${servedData}`);
+            addLog("api", `[Phase 4] Delivery: 302 → S3/R2 '${bestVariantName}' (jpg) -> ${servedData}`);
             res.setHeader("Content-Type", "image/jpeg");
             return res.redirect(302, servedData);
           }
