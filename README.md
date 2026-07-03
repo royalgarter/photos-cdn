@@ -105,6 +105,25 @@ GET /api/cdn/:width/:height
 | `X-Async-Generated` | `true` if a new image was generated for this request |
 | `Cache-Control` | `public, max-age=31536000` (1 year) |
 
+**Prefer: respond-async (RFC 7240):**
+
+Add `Prefer: respond-async` header to receive a non-blocking `202 Accepted` response instead of waiting for generation. Poll the `Location` header URL until `303` redirect (ready) or `202` (still pending).
+
+```
+Client                          Server
+  │── GET /api/cdn/800/600 ───► │  similarity < 0.85, generation needed
+  │   Prefer: respond-async     │
+  │◄── 202 Accepted ───────────  │  generation started in background
+  │    Location: /status/job123  │
+  │    Retry-After: 5            │
+  │                              │
+  │── GET /status/job123 ──────► │  still generating
+  │◄── 202 pending ─────────────  │  Retry-After: 3
+  │                              │
+  │── GET /status/job123 ──────► │  done
+  │◄── 303 → /api/cdn/800/600 ─  │  redirect to final image
+```
+
 **Examples:**
 
 ```bash
@@ -119,12 +138,116 @@ GET /api/cdn/800/600?text=mountain+lake&format=blurhash
 
 # LQIP for progressive loading
 GET /api/cdn/800/600?text=cyberpunk+city&format=lqip
+
+# Non-blocking async generation
+GET /api/cdn/800/600?text=aurora+borealis
+Prefer: respond-async
+→ 202 + Location: /api/cdn/800/600/status/cdn-abc123
+
+# Poll for result
+GET /api/cdn/800/600/status/cdn-abc123?text=aurora+borealis
+→ 202 (pending) or 303 → final image URL
+```
+
+### srcset Endpoint
+
+Returns a complete `srcset` payload ready for native browser lazy loading across all 10 breakpoints.
+
+```
+GET /api/cdn/srcset
+```
+
+| Param | Type | Default | Description |
+|---|---|---|---|
+| `text` | query | — | Natural language description |
+| `category` | query | `nature` | Category filter when no `text` |
+| `seed` | query | `42` | Deterministic seed |
+| `output` | query | `jpg` | `jpg` \| `png` \| `webp` |
+
+**Request headers:**
+
+| Header | Effect |
+|---|---|
+| `Prefer: respond-async` | Returns `202` immediately with `Location` poll URL + fallback payload |
+
+**Response (200):**
+
+```json
+{
+  "key": "gen-abc123",
+  "src": "https://photos.newsrss.org/medium/gen-abc123.jpg",
+  "srcset": "https://photos.newsrss.org/thumbnail/gen-abc123.jpg 150w, ..., https://photos.newsrss.org/desktop_4k/gen-abc123.jpg 3840w",
+  "sizes": "(max-width: 360px) 360px, (max-width: 768px) 768px, ..., 3840px",
+  "width": 1920,
+  "height": 1080,
+  "alt": "misty mountain at dawn",
+  "format": "webp",
+  "similarity": 0.9998,
+  "isFallback": false,
+  "blurhash": "L6PZfHeD.AyD_N%g9GMy?v%0IAxG",
+  "metadata": { "category": "nature", "seed": 42, "prompt": "..." }
+}
+```
+
+**Response (202 — Prefer: respond-async):**
+
+```json
+{
+  "status": "accepted",
+  "jobId": "srcset-xyz789",
+  "message": "Image generation started. Poll Location header for readiness.",
+  "fallback": { ...same shape as 200 but isFallback: true }
+}
+```
+
+**Poll endpoint:**
+
+```
+GET /api/cdn/srcset/status/:jobId?text=...&output=...
+```
+Returns `200` with full payload when ready, `202` with `Retry-After: 3` while pending.
+
+**Integration example:**
+
+```js
+// Instant (stale-while-revalidate, never blocks)
+const { src, srcset, sizes, alt } = await fetch(
+  '/api/cdn/srcset?text=sunset+beach&output=webp'
+).then(r => r.json());
+
+img.src = src;
+img.srcset = srcset;
+img.sizes = sizes;
+img.loading = 'lazy';
+
+// Non-blocking async with auto-upgrade
+const res = await fetch('/api/cdn/srcset?text=sunset+beach', {
+  headers: { 'Prefer': 'respond-async' }
+});
+if (res.status === 202) {
+  const { fallback } = await res.json();
+  img.src = fallback.src;                  // show fallback immediately
+  const pollUrl = res.headers.get('Location');
+  const poll = setInterval(async () => {
+    const r = await fetch(pollUrl);
+    if (r.status === 200) {
+      const data = await r.json();
+      img.srcset = data.srcset;            // upgrade to real image
+      img.src = data.src;
+      clearInterval(poll);
+    }
+  }, 3000);
+}
 ```
 
 ### Other Endpoints
 
 | Method | Path | Description |
 |---|---|---|
+| GET | `/api/cdn/:w/:h` | Main CDN image endpoint |
+| GET | `/api/cdn/:w/:h/status/:jobId` | Poll async generation job |
+| GET | `/api/cdn/srcset` | srcset payload for lazy loading |
+| GET | `/api/cdn/srcset/status/:jobId` | Poll async srcset job |
 | GET | `/api/images` | All images in database |
 | GET | `/api/queue` | Last 50 queue jobs |
 | GET | `/api/logs` | Last 100 system logs |

@@ -154,6 +154,14 @@ const registerAppState = () => {
     // Live test result
     testResult: null,
 
+    // srcset tab state
+    srcsetText: "misty mountain at dawn",
+    srcsetOutput: "webp",
+    srcsetAsync: false,
+    srcsetResult: null,
+    srcsetPollUrl: null,
+    srcsetPollTimer: null,
+
     // Navigation tab
     activeTab: "sandbox",
 
@@ -223,6 +231,49 @@ const registerAppState = () => {
           renderIcons();
         });
       });
+    },
+
+    // srcset endpoint tester
+    async executeSrcset() {
+      if (this.srcsetPollTimer) { clearInterval(this.srcsetPollTimer); this.srcsetPollTimer = null; }
+      this.srcsetResult = null;
+      this.srcsetPollUrl = null;
+
+      const params = new URLSearchParams({ text: this.srcsetText, output: this.srcsetOutput });
+      const headers = {};
+      if (this.srcsetAsync) headers["Prefer"] = "respond-async";
+
+      try {
+        const res = await fetch(`/api/cdn/srcset?${params}`, { headers });
+        const data = await res.json();
+        this.srcsetResult = { ...data, status: res.status };
+
+        if (res.status === 202) {
+          this.srcsetPollUrl = res.headers.get("Location") || data.fallback?.pollUrl;
+          if (this.srcsetPollUrl) {
+            this.srcsetPollTimer = setInterval(async () => {
+              try {
+                const pr = await fetch(this.srcsetPollUrl);
+                const pd = await pr.json();
+                if (pr.status === 200) {
+                  this.srcsetResult = { ...pd, status: 200 };
+                  clearInterval(this.srcsetPollTimer);
+                  this.srcsetPollTimer = null;
+                  this.$nextTick(() => renderIcons());
+                }
+              } catch (e) { console.error("poll error", e); }
+            }, 3000);
+          }
+        }
+      } catch (e) {
+        console.error("srcset error", e);
+      }
+      this.$nextTick(() => renderIcons());
+    },
+
+    buildImgTag() {
+      if (!this.srcsetResult?.src) return "";
+      return `<img\n  src="${this.srcsetResult.src}"\n  srcset="${this.srcsetResult.srcset}"\n  sizes="${this.srcsetResult.sizes}"\n  alt="${this.srcsetResult.alt || ""}"\n  loading="lazy"\n  decoding="async"\n/>`;
     },
 
     // Fetch Images API

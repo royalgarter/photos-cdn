@@ -82,6 +82,14 @@
               <span x-show="activeQueueCount > 0" class="absolute top-1 right-1 h-1.5 w-1.5 bg-yellow-500"></span>
             </button>
             <button
+              @click="activeTab = 'srcset'"
+              class="flex items-center gap-2 px-4 py-2 text-xs font-medium transition-colors"
+              :class="activeTab === 'srcset' ? 'bg-purple-600 text-white border border-purple-600 font-bold' : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'"
+            >
+              <i data-lucide="layout" class="h-3.5 w-3.5"></i>
+              srcset / Async
+            </button>
+            <button
               @click="activeTab = 'settings'"
               class="flex items-center gap-2 px-4 py-2 text-xs font-medium transition-colors"
               :class="activeTab === 'settings' ? 'bg-blue-600 text-white border border-blue-600 font-bold' : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'"
@@ -743,6 +751,157 @@
                   </template>
                 </div>
 
+              </div>
+            </div>
+
+            <!-- TAB: SRCSET & ASYNC -->
+            <div x-show="activeTab === 'srcset'" class="space-y-6" x-transition>
+              <div class="bg-white border border-gray-300 p-6 space-y-6">
+                <div>
+                  <h2 class="text-sm font-bold text-gray-900 flex items-center gap-2">
+                    <i data-lucide="layout" class="h-4 w-4 text-purple-500"></i>
+                    srcset Endpoint &amp; Respond-Async
+                  </h2>
+                  <p class="text-xs text-gray-500 mt-1">
+                    <code class="bg-gray-100 text-purple-600 px-1 font-mono">GET /api/cdn/srcset</code> returns a ready-to-use <code class="bg-gray-100 text-blue-600 px-1 font-mono">srcset</code> payload for native browser lazy loading.
+                    Add <code class="bg-gray-100 text-orange-600 px-1 font-mono">Prefer: respond-async</code> header to get a non-blocking 202 response with a poll URL.
+                  </p>
+                </div>
+
+                <!-- srcset tester -->
+                <div class="space-y-3">
+                  <h3 class="text-xs font-bold text-gray-800 uppercase tracking-wider font-mono border-b border-gray-200 pb-1.5 flex items-center gap-1.5">
+                    <span class="h-2 w-2 bg-purple-500"></span>
+                    srcset Tester
+                  </h3>
+                  <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+                    <div class="md:col-span-2">
+                      <label class="text-xs font-semibold text-gray-700 block mb-1">Text Query</label>
+                      <input type="text" x-model="srcsetText" placeholder="e.g. misty mountain at dawn"
+                        class="w-full bg-white border border-gray-300 px-3 py-2 text-xs font-mono text-gray-900 focus:outline-none focus:border-purple-500" />
+                    </div>
+                    <div>
+                      <label class="text-xs font-semibold text-gray-700 block mb-1">Output Format</label>
+                      <select x-model="srcsetOutput" class="w-full bg-white border border-gray-300 px-3 py-2 text-xs font-mono text-gray-900 focus:outline-none focus:border-purple-500">
+                        <option value="webp">webp</option>
+                        <option value="jpg">jpg</option>
+                        <option value="png">png</option>
+                      </select>
+                    </div>
+                  </div>
+                  <div class="flex items-center gap-4">
+                    <label class="flex items-center gap-2 text-xs font-semibold text-gray-700 cursor-pointer">
+                      <input type="checkbox" x-model="srcsetAsync" class="h-3 w-3 rounded border-gray-300 text-orange-500" />
+                      <span>Send <code class="bg-orange-50 text-orange-600 px-1 font-mono border border-orange-200">Prefer: respond-async</code></span>
+                    </label>
+                    <button @click="executeSrcset()"
+                      class="bg-purple-600 hover:bg-purple-700 text-white font-semibold py-2 px-5 border border-purple-700 transition-colors cursor-pointer text-xs flex items-center gap-2">
+                      <i data-lucide="send" class="h-3.5 w-3.5"></i>
+                      Execute
+                    </button>
+                  </div>
+                </div>
+
+                <!-- srcset result -->
+                <div x-show="srcsetResult" class="space-y-4">
+                  <h3 class="text-xs font-bold text-gray-800 uppercase tracking-wider font-mono border-b border-gray-200 pb-1.5 flex items-center gap-1.5">
+                    <span class="h-2 w-2 bg-green-500"></span>
+                    Response
+                  </h3>
+
+                  <!-- Status badge -->
+                  <div class="flex items-center gap-3">
+                    <span class="text-xs font-mono px-2 py-0.5 border font-bold"
+                      :class="srcsetResult?.status === 202 ? 'border-orange-400 text-orange-600 bg-orange-50' : 'border-green-500 text-green-700 bg-green-50'"
+                      x-text="srcsetResult?.status === 202 ? '202 Accepted (async)' : '200 OK'"></span>
+                    <span x-show="srcsetResult?.similarity" class="text-xs text-gray-500 font-mono">
+                      similarity: <span class="font-bold text-gray-800" x-text="srcsetResult?.similarity?.toFixed ? srcsetResult.similarity.toFixed(4) : srcsetResult?.similarity"></span>
+                    </span>
+                    <span x-show="srcsetResult?.status === 202" class="text-xs text-orange-600 font-mono flex items-center gap-1">
+                      <i data-lucide="clock" class="h-3 w-3"></i>
+                      Polling every 3s...
+                    </span>
+                  </div>
+
+                  <!-- Preview image -->
+                  <div x-show="srcsetResult?.src" class="flex gap-4 items-start">
+                    <div class="border border-gray-200 overflow-hidden bg-gray-100 flex-shrink-0" style="width:120px;height:80px">
+                      <img :src="srcsetResult?.src" :alt="srcsetResult?.alt"
+                        class="w-full h-full object-cover"
+                        loading="lazy" />
+                    </div>
+                    <div class="flex-1 min-w-0">
+                      <p class="text-xs text-gray-500 mb-1">Default <code class="font-mono">src</code></p>
+                      <p class="text-xs font-mono text-blue-700 break-all" x-text="srcsetResult?.src"></p>
+                      <p class="text-xs text-gray-500 mt-2 mb-1">Key / Format</p>
+                      <p class="text-xs font-mono text-gray-800" x-text="`${srcsetResult?.key} · ${srcsetResult?.format}`"></p>
+                    </div>
+                  </div>
+
+                  <!-- srcset value -->
+                  <div x-show="srcsetResult?.srcset">
+                    <p class="text-xs font-semibold text-gray-700 mb-1">srcset <span class="font-normal text-gray-400" x-text="`(${srcsetResult?.srcset?.split(',').length || 0} breakpoints)`"></span></p>
+                    <pre class="bg-gray-900 text-green-400 text-xs p-3 overflow-x-auto font-mono leading-relaxed rounded-none whitespace-pre-wrap break-all" x-text="srcsetResult?.srcset?.split(',').join(',\n')"></pre>
+                  </div>
+
+                  <!-- sizes -->
+                  <div x-show="srcsetResult?.sizes">
+                    <p class="text-xs font-semibold text-gray-700 mb-1">sizes</p>
+                    <code class="bg-gray-100 text-gray-800 text-xs px-2 py-1 font-mono block" x-text="srcsetResult?.sizes"></code>
+                  </div>
+
+                  <!-- HTML snippet -->
+                  <div x-show="srcsetResult?.src">
+                    <p class="text-xs font-semibold text-gray-700 mb-1">Ready-to-use HTML</p>
+                    <pre class="bg-gray-900 text-yellow-300 text-xs p-3 overflow-x-auto font-mono rounded-none whitespace-pre-wrap" x-text="buildImgTag()"></pre>
+                  </div>
+
+                  <!-- Async polling result -->
+                  <div x-show="srcsetResult?.status === 202" class="bg-orange-50 border border-orange-200 p-3 text-xs text-orange-800 space-y-1">
+                    <p class="font-semibold flex items-center gap-1"><i data-lucide="clock" class="h-3.5 w-3.5"></i> Async Job: <span x-text="srcsetResult?.jobId" class="font-mono"></span></p>
+                    <p>Poll URL: <code class="font-mono text-orange-700 break-all" x-text="srcsetPollUrl"></code></p>
+                    <p class="text-gray-500">Fallback image served while generating. Result auto-updates when ready.</p>
+                  </div>
+                </div>
+
+                <!-- Reference code -->
+                <div class="space-y-3 border-t border-gray-200 pt-4">
+                  <h3 class="text-xs font-bold text-gray-800 uppercase tracking-wider font-mono pb-1 flex items-center gap-1.5">
+                    <span class="h-2 w-2 bg-blue-500"></span>
+                    Integration Examples
+                  </h3>
+                  <pre class="bg-gray-900 text-gray-300 text-xs p-4 overflow-x-auto font-mono leading-relaxed rounded-none"><!-- Instant srcset (blocking) -->
+fetch('/api/cdn/srcset?text=sunset+beach&output=webp')
+  .then(r => r.json())
+  .then(({ src, srcset, sizes, alt }) => {
+    img.src = src;
+    img.srcset = srcset;
+    img.sizes = sizes;
+    img.alt = alt;
+    img.loading = 'lazy';
+  });
+
+<!-- Async (non-blocking, polls until ready) -->
+const res = await fetch('/api/cdn/srcset?text=sunset+beach', {
+  headers: { 'Prefer': 'respond-async' }
+});
+if (res.status === 202) {
+  const { jobId, fallback } = await res.json();
+  const pollUrl = res.headers.get('Location');
+  // Show fallback image immediately
+  img.src = fallback.src;
+  // Poll for real result
+  const poll = setInterval(async () => {
+    const r = await fetch(pollUrl);
+    if (r.status === 200) {
+      const data = await r.json();
+      img.srcset = data.srcset;
+      img.src = data.src;
+      clearInterval(poll);
+    }
+  }, 3000);
+}</pre>
+                </div>
               </div>
             </div>
 

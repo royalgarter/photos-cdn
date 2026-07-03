@@ -1206,6 +1206,32 @@ app.get("/api/logs", async (req, res) => {
   res.json(logs);
 });
 
+// Poll endpoint for async CDN generation jobs
+app.get("/api/cdn/:width/:height/status/:jobId", async (req, res) => {
+  const textQuery = req.query.text as string;
+  const outputFormat = parseOutputFormat(req.query.output as string);
+  const width = parseInt(req.params.width) || 800;
+  const height = parseInt(req.params.height) || 600;
+  if (!textQuery) return res.status(400).json({ error: "text param required" });
+
+  const currentImages = await getImages();
+  const vector = await getEmbeddingVector(textQuery);
+  const closest = await findClosestImage(vector, currentImages);
+
+  if (closest && closest.similarity >= 0.85) {
+    // Generation done — redirect to final image
+    res.setHeader("X-Similarity-Score", closest.similarity.toString());
+    return res.redirect(303, `/api/cdn/${width}/${height}?text=${encodeURIComponent(textQuery)}&output=${outputFormat}`);
+  }
+
+  res.setHeader("Retry-After", "3");
+  return res.status(202).json({
+    status: "pending",
+    similarity: closest?.similarity || 0,
+    message: "Still generating. Retry after Retry-After seconds."
+  });
+});
+
 // THE PHOTOS CDN API ENDPOINT
 app.get("/api/cdn/:width/:height", async (req, res) => {
   try {
@@ -1217,6 +1243,7 @@ app.get("/api/cdn/:width/:height", async (req, res) => {
     const textQuery = req.query.text as string;
     const format = (req.query.format as string) || "image";
     const outputFormat = parseOutputFormat(req.query.output as string);
+    const prefer = (req.headers["prefer"] as string) || "";
 
     addLog("api", `[Request Received] GET /${width}/${height}?category=${category}&seed=${seed}&text=${textQuery || "none"}&format=${format}&output=${outputFormat}`);
 
@@ -1253,10 +1280,26 @@ app.get("/api/cdn/:width/:height", async (req, res) => {
     let triggerGeneration = false;
     if (textQuery && similarityScore < 0.85) {
       triggerGeneration = true;
-      addLog("api", `[Phase 3] Match similarity (${similarityScore.toFixed(4)}) below 0.85 — serving best match immediately, generating in background (stale-while-revalidate).`);
-      // Return best match now — do NOT block response on generation
+
+      if (prefer.includes("respond-async")) {
+        // RFC 7240 — client accepts async. Return 202 immediately with poll location.
+        const jobId = `cdn-${Math.random().toString(36).substring(2, 9)}`;
+        addLog("api", `[Phase 3] Prefer: respond-async — returning 202, job ${jobId}`);
+        generateImageAndSave(textQuery, category, seed)
+          .then(() => addLog("api", `[Phase 3] Async job ${jobId} complete for: "${textQuery}"`))
+          .catch(err => addLog("api", `[Phase 3 ERROR] Async job ${jobId} failed: ${(err as Error).message}`));
+        res.setHeader("Location", `/api/cdn/${width}/${height}/status/${jobId}?text=${encodeURIComponent(textQuery)}&format=${format}&output=${outputFormat}`);
+        res.setHeader("Retry-After", "5");
+        return res.status(202).json({
+          status: "accepted",
+          jobId,
+          message: "Image generation started. Poll Location for readiness.",
+          fallback: finalImage ? `${req.protocol}://${req.get("host")}/api/cdn/${width}/${height}?text=${encodeURIComponent(textQuery)}&output=${outputFormat}` : null
+        });
+      }
+
+      addLog("api", `[Phase 3] Similarity ${similarityScore.toFixed(4)} < 0.85 — SWR: serving best match, generating in background.`);
       cacheControl = "public, max-age=60, stale-while-revalidate=86400";
-      // Background generation — updates DB so next request gets the real image
       generateImageAndSave(textQuery, category, seed)
         .then(() => addLog("api", `[Phase 3] Background generation complete for: "${textQuery}"`))
         .catch(err => addLog("api", `[Phase 3 ERROR] Background generation failed: ${(err as Error).message}`));
@@ -1360,7 +1403,173 @@ app.get("/api/cdn/:width/:height", async (req, res) => {
 });
 
 // ==========================================
-// 5. STATIC FILES & SERVING
+// 5. SRCSET ENDPOINT
+// ==========================================
+
+const SRCSET_WIDTHS: { resName: string; w: number }[] = [
+  { resName: "thumbnail",      w: 150  },
+  { resName: "medium",         w: 400  },
+  { resName: "mobile_standard",w: 360  },
+  { resName: "mobile_medium",  w: 390  },
+  { resName: "mobile_large",   w: 412  },
+  { resName: "tablet_standard",w: 768  },
+  { resName: "desktop_budget", w: 1366 },
+  { resName: "desktop_1080p",  w: 1920 },
+  { resName: "desktop_1440p",  w: 2560 },
+  { resName: "desktop_4k",     w: 3840 }
+];
+
+app.get("/api/cdn/srcset", async (req, res) => {
+  try {
+    const category = (req.query.category as string) || "nature";
+    const seed = parseInt(req.query.seed as string) || 42;
+    const textQuery = req.query.text as string;
+    const outputFormat = parseOutputFormat(req.query.output as string);
+    const prefer = req.headers["prefer"] || "";
+
+    addLog("api", `[srcset] GET /api/cdn/srcset?text=${textQuery || "none"}&output=${outputFormat}`);
+
+    const currentImages = await getImages();
+    let finalImage: ImageDocument | null = null;
+    let similarityScore = 0;
+    let asyncJobId: string | null = null;
+
+    if (textQuery) {
+      const vector = await getEmbeddingVector(textQuery);
+      const closest = await findClosestImage(vector, currentImages);
+      finalImage = closest?.image || null;
+      similarityScore = closest?.similarity || 0;
+
+      if (similarityScore < 0.85) {
+        if (prefer.includes("respond-async")) {
+          // 202 — kick off background generation, return job location
+          const jobId = `srcset-${Math.random().toString(36).substring(2, 9)}`;
+          asyncJobId = jobId;
+          generateImageAndSave(textQuery, category, seed)
+            .then(() => addLog("api", `[srcset async] Generation complete for job ${jobId}: "${textQuery}"`))
+            .catch(err => addLog("api", `[srcset async] Generation failed for job ${jobId}: ${(err as Error).message}`));
+          res.setHeader("Location", `/api/cdn/srcset/status/${jobId}?text=${encodeURIComponent(textQuery)}&output=${outputFormat}`);
+          return res.status(202).json({
+            status: "accepted",
+            jobId,
+            message: "Image generation started. Poll Location header for readiness.",
+            fallback: buildSrcsetPayload(finalImage || currentImages[0], outputFormat, similarityScore, true)
+          });
+        }
+        // Stale-while-revalidate — return best match, generate in background
+        generateImageAndSave(textQuery, category, seed)
+          .then(() => addLog("api", `[srcset] Background generation complete for: "${textQuery}"`))
+          .catch(err => addLog("api", `[srcset] Background generation failed: ${(err as Error).message}`));
+        res.setHeader("Cache-Control", "public, max-age=60, stale-while-revalidate=86400");
+      } else {
+        res.setHeader("Cache-Control", "public, max-age=31536000");
+      }
+    } else {
+      const filtered = currentImages.filter(img => img.category.toLowerCase() === category.toLowerCase());
+      if (filtered.length > 0) {
+        filtered.sort((a, b) => Math.abs(a.seed - seed) - Math.abs(b.seed - seed));
+        finalImage = filtered[0];
+        similarityScore = 1.0;
+      }
+      res.setHeader("Cache-Control", "public, max-age=31536000");
+    }
+
+    const image = finalImage || currentImages[0];
+    if (!image) return res.status(404).json({ error: "No images available" });
+
+    res.setHeader("Vary", "Accept");
+    res.setHeader("X-Similarity-Score", similarityScore.toString());
+    res.setHeader("X-Async-Generated", asyncJobId ? "pending" : "false");
+    return res.status(200).json(buildSrcsetPayload(image, outputFormat, similarityScore, false));
+
+  } catch (error) {
+    addLog("system", `[srcset ERROR] ${(error as Error).message}`);
+    res.status(500).json({ error: "Internal Server Error", message: (error as Error).message });
+  }
+});
+
+// Poll endpoint — returns 200 once image exists, 202 while still generating
+app.get("/api/cdn/srcset/status/:jobId", async (req, res) => {
+  const textQuery = req.query.text as string;
+  const outputFormat = parseOutputFormat(req.query.output as string);
+  if (!textQuery) return res.status(400).json({ error: "text param required" });
+
+  const currentImages = await getImages();
+  if (textQuery) {
+    const vector = await getEmbeddingVector(textQuery);
+    const closest = await findClosestImage(vector, currentImages);
+    if (closest && closest.similarity >= 0.85) {
+      return res.status(200).json({
+        status: "ready",
+        ...buildSrcsetPayload(closest.image, outputFormat, closest.similarity, false)
+      });
+    }
+  }
+  // Still generating
+  const fallback = currentImages[0];
+  res.setHeader("Retry-After", "3");
+  return res.status(202).json({
+    status: "pending",
+    message: "Still generating, retry after Retry-After seconds.",
+    fallback: fallback ? buildSrcsetPayload(fallback, outputFormat, 0, true) : null
+  });
+});
+
+function buildSrcsetPayload(image: ImageDocument, fmt: OutputFormat, similarity: number, isFallback: boolean) {
+  const fmtSuffix = fmt === "jpg" ? "" : `_${fmt}`;
+  const variants = image.variants || {};
+
+  const srcsetParts: string[] = [];
+  for (const { resName, w } of SRCSET_WIDTHS) {
+    const key = `${resName}${fmtSuffix}`;
+    const url = variants[key] || variants[resName];
+    if (url && url.startsWith("http")) {
+      srcsetParts.push(`${url} ${w}w`);
+    }
+  }
+
+  // Default src: medium or original
+  const src = (fmt === "jpg" ? variants.medium : variants[`medium_${fmt}`]) ||
+               variants.medium ||
+               image.sourceUrl;
+
+  const sizes = [
+    "(max-width: 360px) 360px",
+    "(max-width: 768px) 768px",
+    "(max-width: 1366px) 1366px",
+    "(max-width: 1920px) 1920px",
+    "3840px"
+  ].join(", ");
+
+  return {
+    key: image._key,
+    src,
+    srcset: srcsetParts.join(", "),
+    sizes,
+    width: 1920,
+    height: 1080,
+    alt: image.text,
+    format: fmt,
+    similarity,
+    isFallback,
+    blurhash: "L6PZfHeD.AyD_N%g9GMy?v%0IAxG",
+    metadata: {
+      category: image.category,
+      seed: image.seed,
+      prompt: image.text
+    }
+  };
+}
+
+// ==========================================
+// 6. RESPOND-ASYNC ON MAIN CDN ENDPOINT
+// ==========================================
+
+// Patch the CDN endpoint to also support Prefer: respond-async
+// (handled inline in the CDN route via the prefer header check below)
+
+// ==========================================
+// 7. STATIC FILES & SERVING
 // ==========================================
 
 async function startServer() {
