@@ -143,7 +143,10 @@ const registerAppState = () => {
       r2AccessKeyId: "",
       r2SecretAccessKey: "",
       r2BucketName: "",
-      r2Endpoint: ""
+      r2Endpoint: "",
+      cfAccountId: "",
+      cfApiToken: "",
+      hfApiToken: ""
     },
     settingsSavedMessage: false,
 

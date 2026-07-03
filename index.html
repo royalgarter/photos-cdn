@@ -782,18 +782,67 @@
                   <!-- Section: Image Generator -->
                   <div class="space-y-4">
                     <h3 class="text-xs font-bold text-gray-800 uppercase tracking-wider font-mono border-b border-gray-200 pb-1.5 flex items-center gap-1.5">
-                      <span class="h-2 w-2 bg-blue-500"></span>
+                      <span class="h-2 w-2 bg-purple-500"></span>
                       On-Demand Text-to-Image Generation
                     </h3>
+                    <p class="text-xs text-gray-400">Provider fallback chain: <span class="font-mono text-gray-600">Gemini → Cloudflare AI → Pollinations.ai (free) → HuggingFace → source image</span></p>
+
+                    <!-- Gemini Image (shared key with embeddings) -->
                     <div>
-                      <label class="text-xs font-semibold text-gray-700 block mb-1">Replicate API Token</label>
+                      <label class="text-xs font-semibold text-gray-700 block mb-1">Gemini API Key <span class="text-gray-400 font-normal">(shared with embedding)</span></label>
+                      <input
+                        type="password"
+                        x-model="settings.geminiApiKey"
+                        placeholder="AIzaSy... (provider #1)"
+                        class="w-full bg-white border border-gray-300 px-3 py-2 text-xs font-mono text-gray-900 focus:outline-none focus:border-blue-500"
+                      />
+                      <p class="text-xs text-gray-400 mt-1">Uses <code class="bg-gray-100 text-blue-600 px-1 font-mono">gemini-2.5-flash-image</code> for image generation.</p>
+                    </div>
+
+                    <!-- Cloudflare Workers AI -->
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <label class="text-xs font-semibold text-gray-700 block mb-1">Cloudflare Account ID <span class="text-gray-400 font-normal">(provider #2)</span></label>
+                        <input
+                          type="text"
+                          x-model="settings.cfAccountId"
+                          placeholder="abc123... (your CF account ID)"
+                          class="w-full bg-white border border-gray-300 px-3 py-2 text-xs font-mono text-gray-900 focus:outline-none focus:border-blue-500"
+                        />
+                      </div>
+                      <div>
+                        <label class="text-xs font-semibold text-gray-700 block mb-1">Cloudflare AI API Token</label>
+                        <input
+                          type="password"
+                          x-model="settings.cfApiToken"
+                          placeholder="cf_... (Workers AI token)"
+                          class="w-full bg-white border border-gray-300 px-3 py-2 text-xs font-mono text-gray-900 focus:outline-none focus:border-blue-500"
+                        />
+                      </div>
+                    </div>
+                    <p class="text-xs text-gray-400">Uses <code class="bg-gray-100 text-blue-600 px-1 font-mono">stable-diffusion-xl-lightning</code> → <code class="bg-gray-100 text-blue-600 px-1 font-mono">stable-diffusion-xl-base-1.0</code>.</p>
+
+                    <!-- HuggingFace -->
+                    <div>
+                      <label class="text-xs font-semibold text-gray-700 block mb-1">HuggingFace API Token <span class="text-gray-400 font-normal">(provider #4 — optional, improves rate limits)</span></label>
+                      <input
+                        type="password"
+                        x-model="settings.hfApiToken"
+                        placeholder="hf_... (leave empty for free anonymous tier)"
+                        class="w-full bg-white border border-gray-300 px-3 py-2 text-xs font-mono text-gray-900 focus:outline-none focus:border-blue-500"
+                      />
+                      <p class="text-xs text-gray-400 mt-1">Uses <code class="bg-gray-100 text-blue-600 px-1 font-mono">FLUX.1-schnell</code> → <code class="bg-gray-100 text-blue-600 px-1 font-mono">stable-diffusion-xl-base-1.0</code>. Pollinations.ai (#3) is always free with no key.</p>
+                    </div>
+
+                    <!-- Replicate (placeholder) -->
+                    <div>
+                      <label class="text-xs font-semibold text-gray-700 block mb-1">Replicate API Token <span class="text-gray-400 font-normal">(placeholder)</span></label>
                       <input
                         type="password"
                         x-model="settings.replicateApiToken"
-                        placeholder="r8_... (Input your Replicate token here)"
-                        class="w-full bg-white border border-gray-300 px-3 py-2 text-xs font-mono text-gray-900 focus:outline-none focus:border-blue-500"
+                        placeholder="r8_... (not yet wired into chain)"
+                        class="w-full bg-gray-50 border border-dashed border-gray-300 px-3 py-2 text-xs font-mono text-gray-400 focus:outline-none focus:border-blue-500"
                       />
-                      <p class="text-xs text-gray-400 mt-1">Token for triggering background text-to-image generations via Stability's SDXL model.</p>
                     </div>
                   </div>
 
