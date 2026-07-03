@@ -1,11 +1,9 @@
 import express from "express";
 import path from "path";
-import { createServer as createViteServer } from "vite";
 import { GoogleGenAI } from "@google/genai";
-import dotenv from "dotenv";
 import { Database } from "arangojs";
-
-dotenv.config();
+import { Jimp } from "jimp";
+import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
 
 const app = express();
 const PORT = 3000;
@@ -23,6 +21,9 @@ interface ImageDocument {
   text: string;
   embedding: number[];
   seed: number;
+  variants?: {
+    [key: string]: string;
+  };
 }
 
 interface LogEntry {
@@ -173,7 +174,7 @@ Assign a float score between 0.0 and 1.0 for each of these 10 dimensions:
 Respond with ONLY a raw JSON array of 10 float values. Example: [0.9, 0.5, 0.0, 0.1, 0.0, 0.3, 0.0, 0.0, 0.2, 0.1]`;
 
     const response = await ai.models.generateContent({
-      model: "gemini-2.5-flash",
+      model: "gemini-3.5-flash",
       contents: prompt,
       config: {
         responseMimeType: "application/json"
@@ -515,57 +516,207 @@ async function getLogs(): Promise<LogEntry[]> {
 // 3. BACKGROUND WORKER (DENO KV QUEUE SIMULATOR)
 // ==========================================
 
-async function processQueue() {
-  const jobs = await getQueue();
-  const job = jobs.find(j => j.status === "pending");
-  if (!job) return;
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
-  job.status = "processing";
-  await updateQueueJob(job);
-  addLog("queue", `Deno KV: worker picked up job ${job.id} for prompt: "${job.prompt}"`);
+const RESOLUTIONS: Record<string, { w: number; h: number }> = {
+  desktop_1080p: { w: 1920, h: 1080 },
+  desktop_1440p: { w: 2560, h: 1440 },
+  desktop_4k: { w: 3840, h: 2160 },
+  desktop_budget: { w: 1366, h: 768 },
+  mobile_standard: { w: 360, h: 800 },
+  mobile_medium: { w: 390, h: 844 },
+  mobile_large: { w: 412, h: 915 },
+  tablet_standard: { w: 768, h: 1024 },
+  tablet_wide: { w: 1280, h: 800 },
+  original: { w: 1024, h: 1024 },
+  medium: { w: 400, h: 400 },
+  thumbnail: { w: 150, h: 150 }
+};
 
-  let progress = 0;
-  const interval = setInterval(async () => {
-    progress += 20;
-    job.progress = progress;
-    await updateQueueJob(job);
+async function uploadToS3(
+  settings: AppSettings,
+  resolutionName: string,
+  imageKey: string,
+  buffer: Buffer,
+  mimeType: string
+): Promise<string | null> {
+  if (!settings.r2AccessKeyId || !settings.r2SecretAccessKey || !settings.r2BucketName) {
+    return null;
+  }
 
-    if (progress === 20) {
-      addLog("queue", `[Phase 3] Calling Replicate Text-to-Image API with seed: ${job.seed}`);
-    } else if (progress === 40) {
-      addLog("queue", "[Phase 3] Downsampling & reading image buffer natively");
-    } else if (progress === 60) {
-      addLog("queue", `[Phase 1] Cloudflare R2: Creating AWS SigV4 PUT Request. Signing SHA-256 payload...`);
-    } else if (progress === 80) {
-      addLog("queue", "[Phase 2] Cloudflare Workers AI: Extracting dense vector embeddings of prompt");
-    } else if (progress === 100) {
-      clearInterval(interval);
-      job.status = "completed";
-      await updateQueueJob(job);
+  try {
+    const s3 = new S3Client({
+      region: "auto",
+      endpoint: settings.r2Endpoint || undefined,
+      credentials: {
+        accessKeyId: settings.r2AccessKeyId,
+        secretAccessKey: settings.r2SecretAccessKey
+      }
+    });
 
-      // Insert new image into database
-      const key = `gen-${Math.random().toString(36).substring(2, 9)}`;
-      const encodedPrompt = encodeURIComponent(job.prompt);
-      const generatedImageUrl = `https://images.unsplash.com/featured/?${encodedPrompt}`;
-      
-      const embedding = await getEmbeddingVector(job.prompt);
-      const newDoc: ImageDocument = {
-        _key: key,
-        sourceUrl: generatedImageUrl,
-        category: job.category || "nature",
-        text: job.prompt,
-        seed: job.seed,
-        embedding: embedding
-      };
+    const key = `${resolutionName}/${imageKey}.jpg`;
+    
+    await s3.send(new PutObjectCommand({
+      Bucket: settings.r2BucketName,
+      Key: key,
+      Body: buffer,
+      ContentType: mimeType
+    }));
 
-      await addImage(newDoc);
-      addLog("queue", `[Phase 2] ArangoDB: POST new vector document to /_api/document/Images as key: ${key}`);
-      addLog("queue", `Deno KV: Successfully completed job ${job.id}! Image cached in Cloudflare R2.`);
-
-      // Trigger next job in queue
-      setTimeout(processQueue, 500);
+    let baseUrl = settings.r2Endpoint;
+    if (baseUrl) {
+      if (!baseUrl.startsWith("http")) {
+        baseUrl = `https://${baseUrl}`;
+      }
+      if (baseUrl.includes("cloudflarestorage.com")) {
+        return `${baseUrl}/${settings.r2BucketName}/${key}`;
+      } else {
+        return `${baseUrl}/${key}`;
+      }
     }
-  }, 1200);
+    return `s3://${settings.r2BucketName}/${key}`;
+  } catch (err) {
+    addLog("queue", `S3/R2 Upload Failed for ${resolutionName}: ${(err as Error).message}`);
+    return null;
+  }
+}
+
+let isQueueProcessing = false;
+
+async function processQueue() {
+  if (isQueueProcessing) return;
+  isQueueProcessing = true;
+
+  try {
+    const jobs = await getQueue();
+    const job = jobs.find(j => j.status === "pending");
+    if (!job) {
+      isQueueProcessing = false;
+      return;
+    }
+
+    job.status = "processing";
+    job.progress = 5;
+    await updateQueueJob(job);
+    addLog("queue", `ArangoDB Queue: Worker picked up job ${job.id} for prompt: "${job.prompt}"`);
+
+    // Step 1: Initializing
+    job.progress = 15;
+    await updateQueueJob(job);
+    addLog("queue", `[Phase 1] Initializing direct Gemini image generator task for prompt: "${job.prompt}"`);
+    await sleep(500);
+
+    // Step 2: Calling Gemini API
+    job.progress = 30;
+    await updateQueueJob(job);
+    addLog("queue", `[Phase 2] Requesting image generation from model 'gemini-3.1-flash-image' (Google Nano Banana 2)`);
+
+    const settings = await getSettings();
+    const apiKey = settings.geminiApiKey || process.env.GEMINI_API_KEY;
+    if (!apiKey) {
+      throw new Error("GEMINI_API_KEY is not configured. Please set it in the Settings panel.");
+    }
+
+    const ai = new GoogleGenAI({ apiKey });
+    const response = await ai.models.generateContent({
+      model: "gemini-3.1-flash-image",
+      contents: {
+        parts: [{ text: job.prompt }]
+      },
+      config: {
+        imageConfig: {
+          aspectRatio: "1:1",
+          imageSize: "1K"
+        }
+      }
+    });
+
+    let base64Image = "";
+    if (response.candidates?.[0]?.content?.parts) {
+      for (const part of response.candidates[0].content.parts) {
+        if (part.inlineData) {
+          base64Image = `data:image/png;base64,${part.inlineData.data}`;
+          break;
+        }
+      }
+    }
+
+    if (!base64Image) {
+      throw new Error("No image data returned from Gemini image generation model.");
+    }
+
+    // Step 3: Jimp Multi-Variant Resizing
+    job.progress = 55;
+    await updateQueueJob(job);
+    addLog("queue", `[Phase 3] Jimp: Reading generated image buffer into memory...`);
+    const jimpImg = await Jimp.read(Buffer.from(base64Image.replace(/^data:image\/\w+;base64,/, ""), "base64"));
+
+    const key = `gen-${Math.random().toString(36).substring(2, 9)}`;
+    const variants: Record<string, string> = {};
+
+    addLog("queue", `[Phase 3] Jimp: Resizing and preparing multi-variant resolutions (Desktop, Mobile, Tablet)...`);
+
+    for (const [resName, dim] of Object.entries(RESOLUTIONS)) {
+      addLog("queue", `[Phase 3] Jimp: Resizing variant '${resName}' to ${dim.w}x${dim.h}...`);
+      const cloned = jimpImg.clone().cover({ w: dim.w, h: dim.h });
+      const buffer = await cloned.getBuffer("image/jpeg");
+      const base64Str = await cloned.getBase64("image/jpeg");
+
+      // Try uploading to S3
+      const s3Url = await uploadToS3(settings, resName, key, buffer, "image/jpeg");
+      if (s3Url) {
+        addLog("queue", `S3/R2: Successfully uploaded ${resName} to '${resName}/${key}.jpg' -> ${s3Url}`);
+        variants[resName] = s3Url;
+      } else {
+        // Fallback to local Base64 cache
+        variants[resName] = base64Str;
+      }
+    }
+
+    // Step 4: Embedding vector extraction
+    job.progress = 80;
+    await updateQueueJob(job);
+    addLog("queue", `[Phase 4] ArangoDB Vectors: Extracting dense vector embeddings of prompt...`);
+    const embedding = await getEmbeddingVector(job.prompt);
+
+    // Step 5: Save to Database
+    job.progress = 95;
+    await updateQueueJob(job);
+    addLog("queue", `[Phase 5] Saving multi-variant images and embedding vector in ArangoDB collection 'Images'...`);
+
+    const newDoc: ImageDocument = {
+      _key: key,
+      sourceUrl: variants.medium || base64Image, // Default view
+      category: job.category || "nature",
+      text: job.prompt,
+      seed: job.seed,
+      embedding: embedding,
+      variants: variants
+    };
+
+    await addImage(newDoc);
+
+    job.progress = 100;
+    job.status = "completed";
+    await updateQueueJob(job);
+    addLog("queue", `ArangoDB Queue: Successfully completed job ${job.id}! All 12 variants cached in ArangoDB collection 'Images'${settings.r2BucketName ? " and Cloudflare R2 S3 bucket" : ""}.`);
+
+  } catch (error) {
+    addLog("queue", `Error processing queue job: ${(error as Error).message}`);
+    try {
+      const jobs = await getQueue();
+      const job = jobs.find(j => j.status === "processing");
+      if (job) {
+        job.status = "failed";
+        await updateQueueJob(job);
+      }
+    } catch (e) {
+      // ignore
+    }
+  } finally {
+    isQueueProcessing = false;
+    setTimeout(processQueue, 1000);
+  }
 }
 
 async function enqueueJob(prompt: string, category: string, seed: number) {
@@ -585,7 +736,7 @@ async function enqueueJob(prompt: string, category: string, seed: number) {
   };
 
   await updateQueueJob(job);
-  addLog("queue", `Deno KV: Enqueued background generator job (${job.id})`);
+  addLog("queue", `ArangoDB Queue: Enqueued background generator job (${job.id})`);
   
   const currentJobs = await getQueue();
   if (!currentJobs.some(j => j.status === "processing")) {
@@ -693,7 +844,7 @@ app.get("/api/cdn/:width/:height", async (req, res) => {
       triggerGeneration = true;
       cacheControl = "public, max-age=60";
       addLog("api", `[Phase 3] Match similarity (${similarityScore.toFixed(4)}) is below 0.85!`);
-      addLog("api", `[Phase 3] Triggering asynchronous generator task in Deno KV...`);
+      addLog("api", `[Phase 3] Triggering asynchronous generator task in ArangoDB Queue...`);
       
       enqueueJob(textQuery, category, seed);
     } else if (textQuery) {
@@ -722,8 +873,50 @@ app.get("/api/cdn/:width/:height", async (req, res) => {
 
     if (format === "lqip") {
       addLog("api", `[Phase 4] Format requested: lqip. Performing 302 Redirect to low-quality placeholder CDN resized asset.`);
+      if (finalImage.variants && finalImage.variants.thumbnail) {
+        const matches = finalImage.variants.thumbnail.match(/^data:([a-zA-Z0-9]+\/[a-zA-Z0-9-.+]+);base64,(.*)$/);
+        if (matches && matches.length === 3) {
+          const mime = matches[1];
+          const buffer = Buffer.from(matches[2], "base64");
+          res.setHeader("Content-Type", mime);
+          return res.status(200).send(buffer);
+        }
+      }
       const lqipUrl = `${finalImage.sourceUrl}&w=40&auto=format&fit=crop&q=20&blur=10`;
       return res.redirect(302, lqipUrl);
+    }
+
+    // Serve custom base64 or S3 multi-variant images from database if available
+    if (finalImage.variants) {
+      // Find the closest resolution name based on the requested width/height
+      let bestVariantName = "medium";
+      let minDiff = Infinity;
+      
+      for (const [resName, dim] of Object.entries(RESOLUTIONS)) {
+        const diff = Math.abs(dim.w - width) + Math.abs(dim.h - height);
+        if (diff < minDiff) {
+          minDiff = diff;
+          bestVariantName = resName;
+        }
+      }
+
+      const servedData = finalImage.variants[bestVariantName] || finalImage.variants.medium || finalImage.variants.original;
+
+      if (servedData) {
+        if (servedData.startsWith("data:")) {
+          const matches = servedData.match(/^data:([a-zA-Z0-9]+\/[a-zA-Z0-9-.+]+);base64,(.*)$/);
+          if (matches && matches.length === 3) {
+            const mime = matches[1];
+            const buffer = Buffer.from(matches[2], "base64");
+            res.setHeader("Content-Type", mime);
+            addLog("api", `[Phase 4] Delivery: Serving cached custom multi-variant resolution '${bestVariantName}' (${width}x${height}) natively from ArangoDB.`);
+            return res.status(200).send(buffer);
+          }
+        } else if (servedData.startsWith("http") || servedData.startsWith("s3://")) {
+          addLog("api", `[Phase 4] Delivery: HTTP 302 Redirecting to S3/R2 Cached asset '${bestVariantName}' -> ${servedData}`);
+          return res.redirect(302, servedData);
+        }
+      }
     }
 
     addLog("api", `[Phase 4] Delivery: HTTP 302 Redirecting to Cloudflare Resizing Edge CDN.`);
@@ -737,28 +930,21 @@ app.get("/api/cdn/:width/:height", async (req, res) => {
 });
 
 // ==========================================
-// 5. VITE DEV SERVER / PRODUCTION SERVING
+// 5. STATIC FILES & SERVING
 // ==========================================
 
 async function startServer() {
   // Connect/Verify ArangoDB connection on startup
   await connectToArango();
 
-  if (process.env.NODE_ENV !== "production") {
-    addLog("system", "Starting development server with Vite middleware...");
-    const vite = await createViteServer({
-      server: { middlewareMode: true },
-      appType: "spa",
-    });
-    app.use(vite.middlewares);
-  } else {
-    addLog("system", "Running in production mode, serving static files...");
-    const distPath = path.join(process.cwd(), "dist");
-    app.use(express.static(distPath));
-    app.get("*all", (req, res) => {
-      res.sendFile(path.join(distPath, "index.html"));
-    });
-  }
+  addLog("system", "Starting development server, serving static files directly...");
+  // Serve files from the current working directory
+  app.use(express.static(process.cwd()));
+
+  // Serve index.html on root request
+  app.get("/", (req, res) => {
+    res.sendFile(path.join(process.cwd(), "index.html"));
+  });
 
   app.listen(PORT, "0.0.0.0", () => {
     addLog("system", `Photos CDN Development playground running at http://localhost:${PORT}`);

@@ -1,18 +1,7 @@
-import Alpine from "alpinejs";
-import { createIcons, Zap, Cpu, Database, Layers, Code, RefreshCw, Sparkles, Search, Play, Eye, ExternalLink, Server, Terminal, Check, Copy, Image, Settings } from "lucide";
-
-const renderIcons = () => {
-  createIcons({
-    icons: {
-      Zap, Cpu, Database, Layers, Code, RefreshCw, Sparkles, Search, Play, Eye, ExternalLink, Server, Terminal, Check, Copy, Image, Settings
-    }
-  });
-};
-
 // ==========================================
-// BLURHASH DECODER HELPER (PURE TS)
+// BLURHASH DECODER HELPER (PURE JS)
 // ==========================================
-const base83Decode = (str: string): number => {
+const base83Decode = (str) => {
   const digits = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz#$*+,-.:;=?@[]^_{|}~";
   let value = 0;
   for (let i = 0; i < str.length; i++) {
@@ -23,17 +12,17 @@ const base83Decode = (str: string): number => {
   return value;
 };
 
-const sRGBToLinear = (value: number): number => {
+const sRGBToLinear = (value) => {
   const v = value / 255;
   return v <= 0.04045 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4);
 };
 
-const linearTosRGB = (value: number): number => {
+const linearTosRGB = (value) => {
   const v = Math.max(0, Math.min(1, value));
   return v <= 0.0031308 ? Math.round(v * 12.92 * 255) : Math.round((1.055 * Math.pow(v, 1 / 2.4) - 0.055) * 255);
 };
 
-const decodeBlurhash = (blurhash: string, width: number, height: number, punch: number = 1.0): Uint8ClampedArray | null => {
+const decodeBlurhash = (blurhash, width, height, punch = 1.0) => {
   if (!blurhash || blurhash.length < 6) return null;
 
   const numComponentsX = (base83Decode(blurhash[0]) % 9) + 1;
@@ -46,7 +35,7 @@ const decodeBlurhash = (blurhash: string, width: number, height: number, punch: 
   const quantVal = base83Decode(blurhash[1]);
   const maxVal = (quantVal + 1) / 166;
 
-  const colors: [number, number, number][] = [];
+  const colors = [];
 
   const value = base83Decode(blurhash.substring(2, 6));
   colors.push([
@@ -103,7 +92,7 @@ const decodeBlurhash = (blurhash: string, width: number, height: number, punch: 
   return pixels;
 };
 
-const renderBlurhash = (blurhash: string, canvas: HTMLCanvasElement) => {
+const renderBlurhash = (blurhash, canvas) => {
   if (!canvas) return;
   const ctx = canvas.getContext("2d");
   if (!ctx) return;
@@ -121,11 +110,17 @@ const renderBlurhash = (blurhash: string, canvas: HTMLCanvasElement) => {
   }
 };
 
+const renderIcons = () => {
+  if (window.lucide && typeof window.lucide.createIcons === "function") {
+    window.lucide.createIcons();
+  }
+};
+
 // ==========================================
 // ALPINEJS APPLICATION INITIALIZATION
 // ==========================================
 const registerAppState = () => {
-  Alpine.data("appState", () => ({
+  window.Alpine.data("appState", () => ({
     // Config state
     width: 800,
     height: 600,
@@ -135,9 +130,9 @@ const registerAppState = () => {
     format: "image",
 
     // Server state
-    images: [] as any[],
-    queue: [] as any[],
-    logs: [] as any[],
+    images: [],
+    queue: [],
+    logs: [],
     denoCode: "",
     loading: false,
     copied: false,
@@ -154,17 +149,17 @@ const registerAppState = () => {
     settingsSavedMessage: false,
 
     // Live test result
-    testResult: null as any,
+    testResult: null,
 
     // Navigation tab
     activeTab: "sandbox",
 
     // Highlight system step matching
-    activeStep: null as number | null,
+    activeStep: null,
 
     // Database view filtering & selection states
     dbCategoryFilter: "all",
-    selectedDbImageKey: null as string | null,
+    selectedDbImageKey: null,
 
     // Presets
     presets: [
@@ -338,7 +333,7 @@ const registerAppState = () => {
         }
 
         const matchedImage = this.images.find(
-          (img: any) => finalUrl.includes(img._key) || finalUrl.includes(encodeURIComponent(img.text))
+          (img) => finalUrl.includes(img._key) || finalUrl.includes(encodeURIComponent(img.text))
         );
 
         this.testResult = {
@@ -355,7 +350,7 @@ const registerAppState = () => {
         // Render blurhash canvas if present
         if (blurhashStr) {
           this.$nextTick(() => {
-            const canvas = document.getElementById("blurhash-canvas") as HTMLCanvasElement;
+            const canvas = document.getElementById("blurhash-canvas");
             if (canvas) {
               renderBlurhash(blurhashStr, canvas);
             }
@@ -420,21 +415,23 @@ const registerAppState = () => {
     // Computed Properties
     get filteredImages() {
       return this.images.filter(
-        (img: any) => this.dbCategoryFilter === "all" || img.category.toLowerCase() === this.dbCategoryFilter.toLowerCase()
+        (img) => this.dbCategoryFilter === "all" || img.category.toLowerCase() === this.dbCategoryFilter.toLowerCase()
       );
     },
 
     get selectedDoc() {
-      return this.images.find((img: any) => img._key === this.selectedDbImageKey) || this.images[0];
+      return this.images.find((img) => img._key === this.selectedDbImageKey) || this.images[0];
     },
 
     get activeQueueCount() {
-      return this.queue.filter((q: any) => q.status === "pending" || q.status === "processing").length;
+      return this.queue.filter((q) => q.status === "pending" || q.status === "processing").length;
     }
   }));
 };
 
-// Register & Start Alpine
-(window as any).Alpine = Alpine;
-registerAppState();
-Alpine.start();
+// Register Alpine State
+if (window.Alpine) {
+  registerAppState();
+} else {
+  document.addEventListener("alpine:init", registerAppState);
+}
