@@ -6,7 +6,7 @@ import { Jimp } from "jimp";
 import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
 
 const app = express();
-const PORT = 3000;
+const PORT = parseInt(process.env.PORT || "3000");
 
 app.use(express.json());
 
@@ -51,6 +51,12 @@ interface AppSettings {
   r2SecretAccessKey: string;
   r2BucketName: string;
   r2Endpoint: string;
+  // Image generation provider fallback chain
+  cfAccountId: string;
+  cfApiToken: string;
+  hfApiToken: string;
+  // placeholder: stabilityApiKey: string;
+  // placeholder: openaiApiKey: string;
 }
 
 // ArangoDB instance configuration
@@ -153,20 +159,22 @@ async function getEmbeddingVector(text: string): Promise<number[]> {
     addLog("system", `[Gemini API] Requesting 128-dimensional vector embedding for: "${text}"`);
     const response = await ai.models.embedContent({
       model: "gemini-embedding-2",
-      contents: text,
+      contents: { parts: [{ text }] },
       config: {
         outputDimensionality: 128
       }
     });
 
-    if (response.embedding?.values && Array.isArray(response.embedding.values)) {
-      const values = response.embedding.values;
-      if (values.length === 128) {
-        const magnitude = Math.sqrt(values.reduce((sum, val) => sum + val * val, 0));
-        return values.map(val => Number((val / magnitude).toFixed(4)));
-      }
+    const values: number[] | undefined =
+      response.embedding?.values ??
+      (response as any).embeddings?.[0]?.values;
+
+    if (Array.isArray(values) && values.length > 0) {
+      const magnitude = Math.sqrt(values.reduce((sum: number, val: number) => sum + val * val, 0));
+      return values.map((val: number) => Number((val / magnitude).toFixed(4)));
     }
-    throw new Error("Invalid or empty embedding values returned from Gemini model");
+    addLog("system", `[Gemini Debug] response keys: ${Object.keys(response).join(", ")}`);
+    throw new Error(`Invalid or empty embedding values returned from Gemini model (got ${JSON.stringify(values)?.slice(0, 100)})`);
   } catch (error) {
     addLog("system", `[Gemini Error] Embedding failed: ${(error as Error).message}. Falling back to 128-dimensional keyword simulation.`);
     return getSimulatedVector(text);
@@ -297,7 +305,10 @@ async function connectToArango() {
         r2AccessKeyId: "",
         r2SecretAccessKey: "",
         r2BucketName: "",
-        r2Endpoint: ""
+        r2Endpoint: "",
+        cfAccountId: "",
+        cfApiToken: "",
+        hfApiToken: ""
       });
       addLog("system", "ArangoDB 'Settings' collection initialized with default configuration structure.");
     } else {
@@ -341,7 +352,10 @@ async function getSettings(): Promise<AppSettings> {
     r2AccessKeyId: doc.r2AccessKeyId || "",
     r2SecretAccessKey: doc.r2SecretAccessKey || "",
     r2BucketName: doc.r2BucketName || "",
-    r2Endpoint: doc.r2Endpoint || ""
+    r2Endpoint: doc.r2Endpoint || "",
+    cfAccountId: doc.cfAccountId || "",
+    cfApiToken: doc.cfApiToken || "",
+    hfApiToken: doc.hfApiToken || ""
   };
 }
 
@@ -617,6 +631,234 @@ async function fetchBaseImage(prompt: string, promptVector: number[]): Promise<{
   }
 }
 
+// ==========================================
+// IMAGE GENERATION PROVIDER CHAIN
+// ==========================================
+
+interface GeneratedImage {
+  base64Image: string; // data:<mime>;base64,<data>
+  provider: string;
+}
+
+async function generateWithGemini(
+  prompt: string,
+  baseImg: { buffer: Buffer; mimeType: string; provider: string } | null,
+  apiKey: string
+): Promise<GeneratedImage | null> {
+  const ai = new GoogleGenAI({
+    apiKey,
+    httpOptions: { headers: { "User-Agent": "aistudio-build" } }
+  });
+
+  try {
+    let response;
+    if (baseImg) {
+      addLog("queue", `[Provider:Gemini] Sending base image from ${baseImg.provider} to gemini-2.5-flash-image...`);
+      response = await ai.models.generateContent({
+        model: "gemini-2.5-flash-image",
+        contents: {
+          parts: [
+            { inlineData: { data: baseImg.buffer.toString("base64"), mimeType: baseImg.mimeType } },
+            { text: `Re-imagine and edit this base image according to this description: ${prompt}` }
+          ]
+        },
+        config: { imageConfig: { aspectRatio: "1:1" } }
+      });
+    } else {
+      addLog("queue", `[Provider:Gemini] Generating from scratch: "${prompt}"`);
+      response = await ai.models.generateContent({
+        model: "gemini-2.5-flash-image",
+        contents: { parts: [{ text: prompt }] },
+        config: { imageConfig: { aspectRatio: "1:1" } }
+      });
+    }
+
+    if (response.candidates?.[0]?.content?.parts) {
+      for (const part of response.candidates[0].content.parts) {
+        if (part.inlineData) {
+          return { base64Image: `data:image/png;base64,${part.inlineData.data}`, provider: "Gemini" };
+        }
+      }
+    }
+    return null;
+  } catch (err) {
+    addLog("queue", `[Provider:Gemini] Failed: ${(err as Error).message}`);
+    return null;
+  }
+}
+
+async function generateWithCloudflareAI(
+  prompt: string,
+  settings: AppSettings
+): Promise<GeneratedImage | null> {
+  if (!settings.cfAccountId || !settings.cfApiToken) {
+    addLog("queue", `[Provider:Cloudflare] Skipped — cfAccountId/cfApiToken not configured.`);
+    return null;
+  }
+
+  // CF Workers AI model order: lightning (fast) → xl-base (quality)
+  const models = [
+    "@cf/bytedance/stable-diffusion-xl-lightning",
+    "@cf/stabilityai/stable-diffusion-xl-base-1.0"
+  ];
+
+  for (const model of models) {
+    try {
+      addLog("queue", `[Provider:Cloudflare] Trying model ${model}...`);
+      const res = await fetch(
+        `https://api.cloudflare.com/client/v4/accounts/${settings.cfAccountId}/ai/run/${model}`,
+        {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${settings.cfApiToken}`,
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify({ prompt })
+        }
+      );
+
+      if (!res.ok) {
+        const err = await res.text();
+        addLog("queue", `[Provider:Cloudflare] ${model} HTTP ${res.status}: ${err.slice(0, 200)}`);
+        continue;
+      }
+
+      const contentType = res.headers.get("Content-Type") || "";
+      if (contentType.includes("image/")) {
+        const buffer = Buffer.from(await res.arrayBuffer());
+        const base64Image = `data:${contentType.split(";")[0]};base64,${buffer.toString("base64")}`;
+        addLog("queue", `[Provider:Cloudflare] Success with ${model} (${buffer.length} bytes)`);
+        return { base64Image, provider: `Cloudflare AI (${model})` };
+      }
+
+      // CF may return JSON with image data
+      const json = await res.json() as any;
+      if (json?.result?.image) {
+        return { base64Image: `data:image/png;base64,${json.result.image}`, provider: `Cloudflare AI (${model})` };
+      }
+
+      addLog("queue", `[Provider:Cloudflare] ${model} returned unexpected format`);
+    } catch (err) {
+      addLog("queue", `[Provider:Cloudflare] ${model} error: ${(err as Error).message}`);
+    }
+  }
+
+  return null;
+}
+
+async function generateWithPollinations(prompt: string): Promise<GeneratedImage | null> {
+  // Free, no API key required — rate limited but reliable
+  try {
+    const encodedPrompt = encodeURIComponent(prompt);
+    const url = `https://image.pollinations.ai/prompt/${encodedPrompt}?width=1024&height=1024&nologo=true&enhance=true`;
+    addLog("queue", `[Provider:Pollinations] Fetching: ${url}`);
+    const res = await fetch(url, { signal: AbortSignal.timeout(30000) });
+    if (!res.ok) {
+      addLog("queue", `[Provider:Pollinations] HTTP ${res.status}: ${res.statusText}`);
+      return null;
+    }
+    const contentType = res.headers.get("Content-Type") || "image/jpeg";
+    const buffer = Buffer.from(await res.arrayBuffer());
+    addLog("queue", `[Provider:Pollinations] Success (${buffer.length} bytes)`);
+    return { base64Image: `data:${contentType.split(";")[0]};base64,${buffer.toString("base64")}`, provider: "Pollinations.ai" };
+  } catch (err) {
+    addLog("queue", `[Provider:Pollinations] Failed: ${(err as Error).message}`);
+    return null;
+  }
+}
+
+async function generateWithHuggingFace(
+  prompt: string,
+  settings: AppSettings
+): Promise<GeneratedImage | null> {
+  // HF Inference API — free tier available, optional token for higher limits
+  const hfToken = (settings as any).hfApiToken || process.env.HF_API_TOKEN;
+  const headers: Record<string, string> = { "Content-Type": "application/json" };
+  if (hfToken) headers["Authorization"] = `Bearer ${hfToken}`;
+
+  // Model order: flux-schnell (fast/free) → sdxl (quality)
+  const models = [
+    "black-forest-labs/FLUX.1-schnell",
+    "stabilityai/stable-diffusion-xl-base-1.0"
+  ];
+
+  for (const model of models) {
+    try {
+      addLog("queue", `[Provider:HuggingFace] Trying ${model}...`);
+      const res = await fetch(`https://api-inference.huggingface.co/models/${model}`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ inputs: prompt }),
+        signal: AbortSignal.timeout(60000)
+      });
+
+      if (res.status === 503) {
+        addLog("queue", `[Provider:HuggingFace] ${model} loading, skipping...`);
+        continue;
+      }
+      if (!res.ok) {
+        addLog("queue", `[Provider:HuggingFace] ${model} HTTP ${res.status}`);
+        continue;
+      }
+
+      const contentType = res.headers.get("Content-Type") || "";
+      if (contentType.includes("image/")) {
+        const buffer = Buffer.from(await res.arrayBuffer());
+        addLog("queue", `[Provider:HuggingFace] Success with ${model} (${buffer.length} bytes)`);
+        return { base64Image: `data:${contentType.split(";")[0]};base64,${buffer.toString("base64")}`, provider: `HuggingFace (${model})` };
+      }
+    } catch (err) {
+      addLog("queue", `[Provider:HuggingFace] ${model} error: ${(err as Error).message}`);
+    }
+  }
+
+  return null;
+}
+
+// placeholder: async function generateWithReplicate(...) { ... }
+// placeholder: async function generateWithStabilityAI(...) { ... }
+// placeholder: async function generateWithOpenAI(...) { ... }
+
+async function generateImageWithFallback(
+  prompt: string,
+  baseImg: { buffer: Buffer; mimeType: string; provider: string } | null,
+  settings: AppSettings
+): Promise<string> {
+  // Provider chain — add new providers here in priority order
+  const geminiKey = settings.geminiApiKey || process.env.GEMINI_API_KEY;
+  if (geminiKey) {
+    const result = await generateWithGemini(prompt, baseImg, geminiKey);
+    if (result) return result.base64Image;
+    addLog("queue", `[Provider Chain] Gemini failed, trying next provider...`);
+  } else {
+    addLog("queue", `[Provider Chain] Gemini skipped — no API key.`);
+  }
+
+  const cfResult = await generateWithCloudflareAI(prompt, settings);
+  if (cfResult) return cfResult.base64Image;
+  addLog("queue", `[Provider Chain] Cloudflare AI failed or unconfigured, trying next provider...`);
+
+  const pollinationsResult = await generateWithPollinations(prompt);
+  if (pollinationsResult) return pollinationsResult.base64Image;
+  addLog("queue", `[Provider Chain] Pollinations.ai failed, trying next provider...`);
+
+  const hfResult = await generateWithHuggingFace(prompt, settings);
+  if (hfResult) return hfResult.base64Image;
+  addLog("queue", `[Provider Chain] HuggingFace failed, trying next provider...`);
+
+  // placeholder: Replicate
+  // placeholder: Stability AI
+  // placeholder: OpenAI DALL-E
+
+  // Last resort: use base image as-is
+  if (baseImg) {
+    addLog("queue", `[Provider Chain] All providers exhausted. Using semantic best-fit source image from ${baseImg.provider}.`);
+    return `data:${baseImg.mimeType};base64,${baseImg.buffer.toString("base64")}`;
+  }
+
+  throw new Error("All image generation providers failed and no base image available.");
+}
+
 async function generateImageAndSave(prompt: string, category: string, seed: number): Promise<ImageDocument> {
   addLog("queue", `[On-Demand] Generating image synchronously for prompt: "${prompt}" (seed: ${seed})`);
 
@@ -627,85 +869,9 @@ async function generateImageAndSave(prompt: string, category: string, seed: numb
   // 2. Fetch base image from Free Source API using semantic best fit comparison
   const baseImg = await fetchBaseImage(prompt, embedding);
 
-  // 3. Call Gemini API
+  // 3. Generate image via provider fallback chain
   const settings = await getSettings();
-  const apiKey = settings.geminiApiKey || process.env.GEMINI_API_KEY;
-  if (!apiKey) {
-    throw new Error("GEMINI_API_KEY is not configured. Please set it in the Settings panel.");
-  }
-
-  const ai = new GoogleGenAI({ 
-    apiKey,
-    httpOptions: {
-      headers: {
-        'User-Agent': 'aistudio-build'
-      }
-    }
-  });
-
-  let base64Image = "";
-  try {
-    let response;
-    if (baseImg) {
-      const base64Data = baseImg.buffer.toString("base64");
-      addLog("queue", `[On-Demand] Sending base image from ${baseImg.provider} to Gemini 2.5 Flash Image (gemini-2.5-flash-image) to re-imagine based on prompt...`);
-      response = await ai.models.generateContent({
-        model: "gemini-2.5-flash-image",
-        contents: {
-          parts: [
-            {
-              inlineData: {
-                data: base64Data,
-                mimeType: baseImg.mimeType
-              }
-            },
-            {
-              text: `Re-imagine and edit this base image according to this description: ${prompt}`
-            }
-          ]
-        },
-        config: {
-          imageConfig: {
-            aspectRatio: "1:1"
-          }
-        }
-      });
-    } else {
-      addLog("queue", `[On-Demand] No base image fetched. Generating from scratch with prompt: "${prompt}"`);
-      response = await ai.models.generateContent({
-        model: "gemini-2.5-flash-image",
-        contents: {
-          parts: [{ text: prompt }]
-        },
-        config: {
-          imageConfig: {
-            aspectRatio: "1:1"
-          }
-        }
-      });
-    }
-
-    if (response.candidates?.[0]?.content?.parts) {
-      for (const part of response.candidates[0].content.parts) {
-        if (part.inlineData) {
-          base64Image = `data:image/png;base64,${part.inlineData.data}`;
-          break;
-        }
-      }
-    }
-  } catch (apiError) {
-    addLog("queue", `[On-Demand] Gemini API Error during generation: ${(apiError as Error).message}. Using high-quality source image as a premium fallback.`);
-  }
-
-  // Fallback to Base Image from our Free Source API best fit if Gemini failed
-  if (!base64Image && baseImg) {
-    base64Image = `data:${baseImg.mimeType};base64,${baseImg.buffer.toString("base64")}`;
-    addLog("queue", `[On-Demand] Falling back to semantically closest ${baseImg.provider} image (${baseImg.buffer.length} bytes) from original URL: ${baseImg.sourceUrl}`);
-  }
-
-  if (!base64Image) {
-    throw new Error("No image data returned from Gemini image generation model and no base image available.");
-  }
+  const base64Image = await generateImageWithFallback(prompt, baseImg, settings);
 
   // 4. Jimp Multi-Variant Resizing
   addLog("queue", `[On-Demand] Jimp: Reading generated image buffer into memory...`);
