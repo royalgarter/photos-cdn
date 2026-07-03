@@ -5,15 +5,15 @@ AI-powered image CDN with semantic vector search. Serves images by dimensions, c
 ## How It Works
 
 ```
-GET /api/cdn/:width/:height?text=...&category=...&seed=...&format=...
+GET /api/cdn/:width/:height?text=...&category=...&seed=...&format=...&output=...
 ```
 
 **4-phase pipeline:**
 
-1. **Intercept** — parse request params (width, height, category, seed, text, format)
+1. **Intercept** — parse request params (width, height, category, seed, text, format, output)
 2. **Vector Search** — embed `text` via Gemini (`gemini-embedding-2`, 128-dim) or keyword fallback → cosine similarity search across ArangoDB `Images` collection
-3. **On-Demand Generation** — if best match similarity < 0.85, fetch a semantically-closest base image from free sources (Unsplash, Pexels, Flickr, Picsum), re-imagine it with `gemini-2.5-flash-image`, resize to 12 variants via Jimp, upload to Cloudflare R2
-4. **Delivery** — serve from ArangoDB base64 cache, redirect to R2/S3 URL, or redirect to source CDN with resize params
+3. **On-Demand Generation** — if best match similarity < 0.85, fetch semantically-closest base image from free sources (Unsplash, Pexels, Flickr, Picsum), pass through provider chain, resize to 12 variants via Jimp + resmush.it compression, upload to Cloudflare R2
+4. **Delivery** — convert to requested output format (jpg/png/webp) via sharp, serve from ArangoDB cache or R2/S3
 
 ## Stack
 
@@ -22,8 +22,9 @@ GET /api/cdn/:width/:height?text=...&category=...&seed=...&format=...
 | Server | Node.js + Express (`--experimental-strip-types` for TypeScript) |
 | Database | ArangoDB (collections: `Images`, `Logs`, `Queue`, `Settings`) |
 | Embeddings | Gemini `gemini-embedding-2` (128-dim); keyword fallback if no key |
-| Image Gen | Gemini `gemini-2.5-flash-image` |
-| Image Processing | Jimp (cover-resize to 12 resolutions) |
+| Image Gen | Provider chain: Gemini → Cloudflare AI → Pollinations.ai → HuggingFace |
+| Image Processing | Jimp (cover-resize to 12 presets) + sharp (format conversion) |
+| Compression | resmush.it API (82% quality, before S3 upload) |
 | Object Storage | Cloudflare R2 (S3-compatible via `@aws-sdk/client-s3`) |
 | Frontend | Alpine.js + Lucide icons (served as static files) |
 
@@ -46,7 +47,7 @@ npm install
 npm start          # or: npm run dev
 ```
 
-Server listens on `http://0.0.0.0:3000`.
+Server listens on `http://0.0.0.0:3000`. Override with `PORT=3001 npm start`.
 
 ### 3. Configure API Keys (via UI)
 
@@ -54,10 +55,13 @@ Open `http://localhost:3000` → Settings tab. All credentials except `ARANGO_UR
 
 | Setting | Purpose |
 |---|---|
-| `geminiApiKey` | Embeddings + image generation (optional — falls back to keyword vectors) |
+| `geminiApiKey` | Embeddings (`gemini-embedding-2`) + image gen (`gemini-2.5-flash-image`) |
+| `cfAccountId` + `cfApiToken` | Cloudflare Workers AI (provider #2 in gen chain) |
+| `hfApiToken` | HuggingFace Inference API — optional, improves rate limits (provider #4) |
 | `r2AccessKeyId` / `r2SecretAccessKey` | Cloudflare R2 upload credentials |
 | `r2BucketName` | R2 bucket name |
-| `r2Endpoint` | R2 endpoint URL |
+| `r2Endpoint` | R2 storage endpoint (`https://<account-id>.r2.cloudflarestorage.com`) |
+| `cdnDomain` | Public CDN domain served to clients (e.g. `https://photos.newsrss.org`) |
 
 ## API Reference
 
@@ -69,23 +73,53 @@ GET /api/cdn/:width/:height
 
 | Param | Type | Default | Description |
 |---|---|---|---|
-| `width` | path | 800 | Output width in pixels |
-| `height` | path | 600 | Output height in pixels |
-| `text` | query | — | Natural language description for semantic search |
-| `category` | query | `nature` | Fallback category filter when no `text` |
+| `width` | path | 800 | Target width in pixels |
+| `height` | path | 600 | Target height in pixels |
+| `text` | query | — | Natural language description for semantic search + generation |
+| `category` | query | `nature` | Category filter when no `text` provided |
 | `seed` | query | `42` | Numeric seed for deterministic category-based selection |
-| `format` | query | `image` | `image` \| `blurhash` \| `lqip` |
+| `format` | query | `image` | Response format: `image` \| `blurhash` \| `lqip` |
+| `output` | query | `jpg` | Image encoding: `jpg` \| `png` \| `webp` |
 
-**Response formats:**
+**`format` behaviour:**
 
-- `image` — 302 redirect to closest resolution variant or CDN URL
-- `blurhash` — JSON `{ blurhash, sourceUrl, similarity, metadata }`
-- `lqip` — 150×150 thumbnail bytes or redirect to low-quality placeholder
+| Value | Response |
+|---|---|
+| `image` | Image bytes or 302 redirect to closest resolution variant |
+| `blurhash` | `application/json` → `{ blurhash, sourceUrl, similarity, metadata }` |
+| `lqip` | 150×150 thumbnail bytes (low-quality image placeholder) |
+
+**`output` behaviour:**
+
+| Value | Mechanism | Notes |
+|---|---|---|
+| `jpg` | 302 redirect to S3/CDN URL | Zero server-side conversion overhead |
+| `png` | Fetch S3 asset → sharp convert → stream bytes | Lossless, larger files |
+| `webp` | Fetch S3 asset → sharp convert → stream bytes | Best compression, ~25% smaller than jpg |
 
 **Response headers:**
 
-- `X-Similarity-Score` — cosine similarity of matched image (0–1)
-- `X-Async-Generated` — `true` if a new image was generated for this request
+| Header | Description |
+|---|---|
+| `X-Similarity-Score` | Cosine similarity of matched image (0–1) |
+| `X-Async-Generated` | `true` if a new image was generated for this request |
+| `Cache-Control` | `public, max-age=31536000` (1 year) |
+
+**Examples:**
+
+```bash
+# Semantic search, WebP output
+GET /api/cdn/1920/1080?text=sunset+over+ocean&output=webp
+
+# Category + seed, PNG
+GET /api/cdn/400/400?category=animals&seed=7&output=png
+
+# Blurhash placeholder
+GET /api/cdn/800/600?text=mountain+lake&format=blurhash
+
+# LQIP for progressive loading
+GET /api/cdn/800/600?text=cyberpunk+city&format=lqip
+```
 
 ### Other Endpoints
 
@@ -98,9 +132,22 @@ GET /api/cdn/:width/:height
 | POST | `/api/settings` | Update settings |
 | POST | `/api/reset` | Clear and reseed database |
 
+## Image Generation Provider Chain
+
+When similarity < 0.85, generation is attempted in order until one succeeds:
+
+| Priority | Provider | Key required | Model |
+|---|---|---|---|
+| 1 | Gemini | `geminiApiKey` | `gemini-2.5-flash-image` |
+| 2 | Cloudflare Workers AI | `cfAccountId` + `cfApiToken` | `sdxl-lightning` → `sdxl-base-1.0` |
+| 3 | Pollinations.ai | none (free) | FLUX |
+| 4 | HuggingFace | `hfApiToken` (optional) | `FLUX.1-schnell` → `sdxl-base-1.0` |
+| — | Replicate / Stability / OpenAI | — | *(placeholders)* |
+| last | Semantic best-fit source image | — | Always available |
+
 ## Image Variants
 
-Every generated image is resized to 12 resolution variants:
+Every generated image is cover-resized to 12 presets and compressed via resmush.it before upload:
 
 | Name | Resolution |
 |---|---|
@@ -117,18 +164,17 @@ Every generated image is resized to 12 resolution variants:
 | `medium` | 400×400 |
 | `thumbnail` | 150×150 |
 
-Variants are stored as base64 in ArangoDB or uploaded to R2 when credentials are configured. Requests are served from the closest matching resolution.
+The closest preset to the requested `width`×`height` is selected. Variants are stored as base64 in ArangoDB or as S3 URLs when R2 is configured.
 
 ## Semantic Vector Search
 
-Each image document stores a 128-dimensional embedding. At query time:
+Each image document stores a 128-dimensional embedding:
 
-1. Query text is embedded (Gemini API or keyword fallback)
-2. Cosine similarity is computed against all stored embeddings
-3. Best match ≥ 0.85 → served immediately with long-lived cache
-4. Best match < 0.85 → on-demand generation triggered synchronously
-
-The keyword fallback maps 10 semantic dimensions (nature, water, sky, darkness, urban, warmth, coldness, futuristic, animals, minimalism) and fills remaining 118 dimensions with deterministic hash values.
+1. Query text embedded via Gemini `gemini-embedding-2` (128-dim, unit-normalized)
+2. Falls back to keyword vectorizer if Gemini unavailable — maps 10 semantic dimensions (nature, water, sky, darkness, urban, warmth, coldness, futuristic, animals, minimalism) + 118 deterministic hash dims
+3. Cosine similarity computed against all stored embeddings
+4. Best match ≥ 0.85 → served with `Cache-Control: public, max-age=31536000`
+5. Best match < 0.85 → on-demand generation triggered synchronously
 
 ## Environment Variables
 
@@ -137,4 +183,6 @@ Only one env var is required at the OS level:
 ```bash
 ARANGO_URL=https://user:pass@host:port/dbname   # required
 GEMINI_API_KEY=...                               # optional bootstrap (overridden by Settings collection)
+HF_API_TOKEN=...                                 # optional bootstrap for HuggingFace
+PORT=3000                                        # optional, default 3000
 ```
