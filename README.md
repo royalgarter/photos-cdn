@@ -19,7 +19,7 @@ GET /api/cdn/:width/:height?text=...&category=...&seed=...&format=...&output=...
 
 | Layer | Tech |
 |---|---|
-| Server | Node.js + Express (`--experimental-strip-types` for TypeScript) |
+| Server | Deno 2 + Express (`deno run --allow-all`, native TypeScript) |
 | Database | ArangoDB (collections: `Images`, `Logs`, `Queue`, `Settings`) |
 | Embeddings | Gemini `gemini-embedding-2` (128-dim); keyword fallback if no key |
 | Image Gen | Provider chain: Gemini → Cloudflare AI → Pollinations.ai → HuggingFace |
@@ -43,11 +43,15 @@ On first start, the server auto-creates collections (`Images`, `Logs`, `Queue`, 
 ### 2. Install & Run
 
 ```bash
-npm install
-npm start          # or: npm run dev
+npm install        # install npm deps (sharp, jimp, etc.)
+npm start          # deno run --allow-all --env=.env server.ts
+# or:
+deno task dev
 ```
 
 Server listens on `http://0.0.0.0:3000`. Override with `PORT=3001 npm start`.
+
+Node.js fallback (no Deno): `npm run start:node`
 
 ### 3. Configure API Keys (via UI)
 

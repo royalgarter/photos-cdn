@@ -4,9 +4,11 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "dev": "node --experimental-strip-types server.ts",
+    "dev": "deno run --allow-all --env=.env server.ts",
+    "start": "deno run --allow-all --env=.env server.ts",
+    "dev:node": "node --experimental-strip-types server.ts",
+    "start:node": "node --experimental-strip-types server.ts",
     "build": "echo 'No build step required'",
-    "start": "node --experimental-strip-types server.ts",
     "lint": "echo 'No lint required'"
   },
   "dependencies": {
