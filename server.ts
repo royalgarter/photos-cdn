@@ -9,7 +9,7 @@ import { ClassicSeedsProvider } from "./providers/classic-seeds.ts";
 import type { FallbackProvider } from "./providers/types.ts";
 
 const app = express();
-const PORT = parseInt(process.env.PORT || "3000");
+const PORT = parseInt(process.env.PORT || "34070");
 
 app.use(express.json());
 
