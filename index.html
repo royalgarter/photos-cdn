@@ -90,6 +90,7 @@
               srcset / Async
             </button>
             <button
+              x-show="window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'"
               @click="activeTab = 'settings'"
               class="flex items-center gap-2 px-4 py-2 text-xs font-medium transition-colors"
               :class="activeTab === 'settings' ? 'bg-blue-600 text-white border border-blue-600 font-bold' : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'"
@@ -906,7 +907,7 @@ if (res.status === 202) {
             </div>
 
             <!-- TAB: SYSTEM SETTINGS -->
-            <div x-show="activeTab === 'settings'" class="space-y-6" x-transition>
+            <div x-show="activeTab === 'settings' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')" class="space-y-6" x-transition>
               <div class="bg-white border border-gray-300 p-6 space-y-6">
                 <div>
                   <h2 class="text-sm font-bold text-gray-900 flex items-center gap-2">
