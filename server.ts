@@ -9,6 +9,7 @@ import { ClassicSeedsProvider } from "./providers/classic-seeds.ts";
 import { PexelsProvider } from "./providers/pexels.ts";
 import { UnsplashProvider } from "./providers/unsplash.ts";
 import { PicsumProvider } from "./providers/picsum.ts";
+import { WallhavenProvider } from "./providers/wallhaven.ts";
 import type { FallbackProvider } from "./providers/types.ts";
 
 const app = express();
@@ -65,6 +66,7 @@ interface AppSettings {
   // Fallback image providers
   pexelsApiKey: string;
   unsplashAccessKey: string;
+  wallhavenApiKey: string;
   // placeholder: stabilityApiKey: string;
   // placeholder: openaiApiKey: string;
 }
@@ -365,7 +367,8 @@ async function connectToArango() {
         hfApiToken: "",
         cdnDomain: "",
         pexelsApiKey: process.env.PEXELS_API_KEY || "",
-        unsplashAccessKey: process.env.UNSPLASH_ACCESS_KEY || ""
+        unsplashAccessKey: process.env.UNSPLASH_ACCESS_KEY || "",
+        wallhavenApiKey: process.env.WALLHAVEN_API_KEY || ""
       });
       addLog("system", "ArangoDB 'Settings' collection initialized with default configuration structure.");
     } else {
@@ -415,7 +418,8 @@ async function getSettings(): Promise<AppSettings> {
     hfApiToken: doc.hfApiToken || "",
     cdnDomain: doc.cdnDomain || "",
     pexelsApiKey: doc.pexelsApiKey || "",
-    unsplashAccessKey: doc.unsplashAccessKey || ""
+    unsplashAccessKey: doc.unsplashAccessKey || "",
+    wallhavenApiKey: doc.wallhavenApiKey || ""
   };
 }
 
@@ -668,6 +672,10 @@ async function uploadToS3(
 
 const FALLBACK_CHAIN: FallbackProvider[] = [
   // Keyed providers first — highest quality, real search results
+  new WallhavenProvider(async () => {
+    const s = await getSettings().catch(() => ({} as any));
+    return s.wallhavenApiKey || process.env.WALLHAVEN_API_KEY;
+  }),
   new PexelsProvider(async () => {
     const s = await getSettings().catch(() => ({} as any));
     return s.pexelsApiKey || process.env.PEXELS_API_KEY;
