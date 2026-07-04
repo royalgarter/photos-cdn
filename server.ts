@@ -1131,6 +1131,41 @@ app.get("/api/images", async (req, res) => {
   res.json(images);
 });
 
+// Migrate existing variant URLs from raw R2 endpoint to cdnDomain
+app.post("/api/images/migrate-cdn-urls", async (_req, res) => {
+  if (!arangoDb) return res.status(503).json({ error: "DB not connected" });
+  const settings = await getSettings();
+  if (!settings.cdnDomain) return res.status(400).json({ error: "cdnDomain not set in settings" });
+  const cdnBase = settings.cdnDomain.replace(/\/$/, "");
+  const r2Base = (settings.r2Endpoint || "").replace(/\/$/, "");
+  if (!r2Base) return res.status(400).json({ error: "r2Endpoint not set in settings" });
+
+  const images = await getImages();
+  const coll = arangoDb.collection("Images");
+  let updated = 0;
+
+  for (const img of images) {
+    if (!img.variants) continue;
+    let changed = false;
+    const newVariants: Record<string, string> = {};
+    for (const [k, url] of Object.entries(img.variants as Record<string, string>)) {
+      if (url.startsWith(r2Base)) {
+        newVariants[k] = cdnBase + url.slice(r2Base.length);
+        changed = true;
+      } else {
+        newVariants[k] = url;
+      }
+    }
+    if (changed) {
+      await coll.update(img._key, { variants: newVariants });
+      updated++;
+    }
+  }
+
+  invalidateImagesCache();
+  res.json({ updated, total: images.length, r2Base, cdnBase });
+});
+
 // Get Queue Jobs
 app.get("/api/queue", async (req, res) => {
   const queue = await getQueue();
