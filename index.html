@@ -11,7 +11,8 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 
     <!-- Tailwind Play CDN -->
-    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdn.html-first.com/litewind-2.0.1.css" />
+    <!-- <script src="https://cdn.tailwindcss.com"></script>
     <script>
       tailwind.config = {
         theme: {
@@ -23,7 +24,7 @@
           }
         }
       }
-    </script>
+    </script> -->
 
     <!-- Lucide Icons CDN -->
     <script src="https://unpkg.com/lucide@latest"></script>
@@ -341,79 +342,7 @@
                 </div>
               </section>
 
-              <!-- 2. Visual Step-by-Step Pipeline Tracker -->
-              <section class="bg-white border border-gray-300 p-6">
-                <h3 class="text-xs font-bold text-gray-900 mb-6 flex items-center gap-2">
-                  <i data-lucide="layers" class="h-4 w-4 text-blue-500"></i>
-                  Request Execution Flow (Step-by-Step Lifecycle)
-                </h3>
 
-                <div class="grid grid-cols-1 md:grid-cols-4 gap-4 relative">
-                  <!-- Flow Line -->
-                  <div class="hidden md:block absolute top-6 left-12 right-12 h-0.5 bg-gray-200 z-0"></div>
-
-                  <!-- Step 1 -->
-                  <div 
-                    class="p-4 border transition-colors z-10 flex flex-col items-center text-center relative"
-                    :class="activeStep === 1 ? 'bg-white border-blue-500 text-blue-600 font-bold' : 'bg-white border-gray-200 text-gray-500'"
-                  >
-                    <div class="h-9 w-9 border flex items-center justify-center mb-3" :class="activeStep === 1 ? 'border-blue-500 text-blue-500' : 'border-gray-200 text-gray-400'">
-                      <i data-lucide="server" class="h-4 w-4"></i>
-                    </div>
-                    <span class="text-xs font-semibold block mb-1" :class="activeStep === 1 ? 'text-blue-600' : 'text-gray-800'">1. Interception</span>
-                    <p class="text-xs leading-relaxed text-gray-500">Parse URI parameters natively. Verify format, seed, & categorization.</p>
-                    <span x-show="activeStep === 1" class="absolute top-1 right-1 flex h-2 w-2">
-                      <span class="relative inline-flex h-2 w-2 bg-blue-500"></span>
-                    </span>
-                  </div>
-
-                  <!-- Step 2 -->
-                  <div 
-                    class="p-4 border transition-colors z-10 flex flex-col items-center text-center relative"
-                    :class="activeStep === 2 ? 'bg-white border-blue-500 text-blue-600 font-bold' : 'bg-white border-gray-200 text-gray-500'"
-                  >
-                    <div class="h-9 w-9 border flex items-center justify-center mb-3" :class="activeStep === 2 ? 'border-blue-500 text-blue-500' : 'border-gray-200 text-gray-400'">
-                      <i data-lucide="database" class="h-4 w-4"></i>
-                    </div>
-                    <span class="text-xs font-semibold block mb-1" :class="activeStep === 2 ? 'text-blue-600' : 'text-gray-800'">2. Vector Evaluation</span>
-                    <p class="text-xs leading-relaxed text-gray-500">Formulate prompt vector via Worker AI. Query ArangoDB AQL cursor.</p>
-                    <span x-show="activeStep === 2" class="absolute top-1 right-1 flex h-2 w-2">
-                      <span class="relative inline-flex h-2 w-2 bg-blue-500"></span>
-                    </span>
-                  </div>
-
-                  <!-- Step 3 -->
-                  <div 
-                    class="p-4 border transition-colors z-10 flex flex-col items-center text-center relative"
-                    :class="activeStep === 3 ? 'bg-white border-blue-500 text-blue-600 font-bold' : 'bg-white border-gray-200 text-gray-500'"
-                  >
-                    <div class="h-9 w-9 border flex items-center justify-center mb-3" :class="activeStep === 3 ? 'border-blue-500 text-blue-500' : 'border-gray-200 text-gray-400'">
-                      <i data-lucide="cpu" class="h-4 w-4"></i>
-                    </div>
-                    <span class="text-xs font-semibold block mb-1" :class="activeStep === 3 ? 'text-blue-600' : 'text-gray-800'">3. Async Worker</span>
-                    <p class="text-xs leading-relaxed text-gray-500">If Similarity &lt; 0.85, enqueue KV Job. Generate, upload R2, map vector.</p>
-                    <span x-show="activeStep === 3" class="absolute top-1 right-1 flex h-2 w-2">
-                      <span class="relative inline-flex h-2 w-2 bg-blue-500"></span>
-                    </span>
-                  </div>
-
-                  <!-- Step 4 -->
-                  <div 
-                    class="p-4 border transition-colors z-10 flex flex-col items-center text-center relative"
-                    :class="activeStep === 4 ? 'bg-white border-blue-500 text-blue-600 font-bold' : 'bg-white border-gray-200 text-gray-500'"
-                  >
-                    <div class="h-9 w-9 border flex items-center justify-center mb-3" :class="activeStep === 4 ? 'border-blue-500 text-blue-500' : 'border-gray-200 text-gray-400'">
-                      <i data-lucide="zap" class="h-4 w-4"></i>
-                    </div>
-                    <span class="text-xs font-semibold block mb-1" :class="activeStep === 4 ? 'text-blue-600' : 'text-gray-800'">4. Delivery & Edge</span>
-                    <p class="text-xs leading-relaxed text-gray-500">Render Blurhash metadata OR 302 Redirect to optimized Cloudflare Image Resizing CDN.</p>
-                    <span x-show="activeStep === 4" class="absolute top-1 right-1 flex h-2 w-2">
-                      <span class="relative inline-flex h-2 w-2 bg-blue-500"></span>
-                    </span>
-                  </div>
-
-                </div>
-              </section>
 
               <!-- 3. API Response Output -->
               <div x-show="testResult !== null" class="bg-white border border-gray-300 p-6" x-transition>
@@ -1141,8 +1070,8 @@ if (res.status === 202) {
           <!-- RIGHT PANEL: SYSTEM TERMINAL LOGS & METRICS (4 columns) -->
           <div class="lg:col-span-4 space-y-6">
             
-            <!-- 1. Status Console panel -->
-            <div class="bg-white border border-gray-300 p-5 font-mono text-xs">
+            <!-- 1.a. Status Console panel -->
+            <div class="hidden bg-white border border-gray-300 p-5 font-mono text-xs">
               <h3 class="text-xs font-bold text-gray-900 mb-4 pb-2 border-b border-gray-300 flex items-center justify-between">
                 <span class="flex items-center gap-1.5">
                   <i data-lucide="server" class="h-3.5 w-3.5 text-blue-500"></i>
@@ -1179,6 +1108,80 @@ if (res.status === 202) {
                     ArangoDB Collection
                   </span>
                 </div>
+              </div>
+            </div>
+
+            <!-- 1.b. Visual Step-by-Step Pipeline Tracker -->
+            <div class="bg-white border border-gray-300 p-6">
+              <h3 class="text-xs font-bold text-gray-900 mb-6 flex items-center gap-2">
+                <i data-lucide="layers" class="h-4 w-4 text-blue-500"></i>
+                Request Execution Flow (Step-by-Step Lifecycle)
+              </h3>
+
+              <div class="grid grid-cols-2 gap-4 relative">
+                <!-- Flow Line -->
+                <div class="hidden md:block absolute top-6 left-12 right-12 h-0.5 bg-gray-200 z-0"></div>
+
+                <!-- Step 1 -->
+                <div
+                  class="p-4 border transition-colors z-10 flex flex-col items-center text-center relative"
+                  :class="activeStep === 1 ? 'bg-white border-blue-500 text-blue-600 font-bold' : 'bg-white border-gray-200 text-gray-500'"
+                >
+                  <div class="h-9 w-9 border flex items-center justify-center mb-3" :class="activeStep === 1 ? 'border-blue-500 text-blue-500' : 'border-gray-200 text-gray-400'">
+                    <i data-lucide="server" class="h-4 w-4"></i>
+                  </div>
+                  <span class="text-xs font-semibold block mb-1" :class="activeStep === 1 ? 'text-blue-600' : 'text-gray-800'">1. Interception</span>
+                  <p class="text-xs leading-relaxed text-gray-500">Parse URI parameters natively. Verify format, seed, & categorization.</p>
+                  <span x-show="activeStep === 1" class="absolute top-1 right-1 flex h-2 w-2">
+                    <span class="relative inline-flex h-2 w-2 bg-blue-500"></span>
+                  </span>
+                </div>
+
+                <!-- Step 2 -->
+                <div
+                  class="p-4 border transition-colors z-10 flex flex-col items-center text-center relative"
+                  :class="activeStep === 2 ? 'bg-white border-blue-500 text-blue-600 font-bold' : 'bg-white border-gray-200 text-gray-500'"
+                >
+                  <div class="h-9 w-9 border flex items-center justify-center mb-3" :class="activeStep === 2 ? 'border-blue-500 text-blue-500' : 'border-gray-200 text-gray-400'">
+                    <i data-lucide="database" class="h-4 w-4"></i>
+                  </div>
+                  <span class="text-xs font-semibold block mb-1" :class="activeStep === 2 ? 'text-blue-600' : 'text-gray-800'">2. Vector Evaluation</span>
+                  <p class="text-xs leading-relaxed text-gray-500">Formulate prompt vector via Worker AI. Query ArangoDB AQL cursor.</p>
+                  <span x-show="activeStep === 2" class="absolute top-1 right-1 flex h-2 w-2">
+                    <span class="relative inline-flex h-2 w-2 bg-blue-500"></span>
+                  </span>
+                </div>
+
+                <!-- Step 3 -->
+                <div
+                  class="p-4 border transition-colors z-10 flex flex-col items-center text-center relative"
+                  :class="activeStep === 3 ? 'bg-white border-blue-500 text-blue-600 font-bold' : 'bg-white border-gray-200 text-gray-500'"
+                >
+                  <div class="h-9 w-9 border flex items-center justify-center mb-3" :class="activeStep === 3 ? 'border-blue-500 text-blue-500' : 'border-gray-200 text-gray-400'">
+                    <i data-lucide="cpu" class="h-4 w-4"></i>
+                  </div>
+                  <span class="text-xs font-semibold block mb-1" :class="activeStep === 3 ? 'text-blue-600' : 'text-gray-800'">3. Async Worker</span>
+                  <p class="text-xs leading-relaxed text-gray-500">If Similarity &lt; 0.85, enqueue KV Job. Generate, upload R2, map vector.</p>
+                  <span x-show="activeStep === 3" class="absolute top-1 right-1 flex h-2 w-2">
+                    <span class="relative inline-flex h-2 w-2 bg-blue-500"></span>
+                  </span>
+                </div>
+
+                <!-- Step 4 -->
+                <div
+                  class="p-4 border transition-colors z-10 flex flex-col items-center text-center relative"
+                  :class="activeStep === 4 ? 'bg-white border-blue-500 text-blue-600 font-bold' : 'bg-white border-gray-200 text-gray-500'"
+                >
+                  <div class="h-9 w-9 border flex items-center justify-center mb-3" :class="activeStep === 4 ? 'border-blue-500 text-blue-500' : 'border-gray-200 text-gray-400'">
+                    <i data-lucide="zap" class="h-4 w-4"></i>
+                  </div>
+                  <span class="text-xs font-semibold block mb-1" :class="activeStep === 4 ? 'text-blue-600' : 'text-gray-800'">4. Delivery & Edge</span>
+                  <p class="text-xs leading-relaxed text-gray-500">Render Blurhash metadata OR 302 Redirect to optimized Cloudflare Image Resizing CDN.</p>
+                  <span x-show="activeStep === 4" class="absolute top-1 right-1 flex h-2 w-2">
+                    <span class="relative inline-flex h-2 w-2 bg-blue-500"></span>
+                  </span>
+                </div>
+
               </div>
             </div>
 
