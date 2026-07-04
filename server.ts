@@ -1136,38 +1136,34 @@ app.get("/api/cdn/:width/:height/status/:jobId", async (req, res) => {
 
 // THE PHOTOS CDN API ENDPOINT
 app.get("/api/cdn/:width/:height", async (req, res) => {
-  try {
-    const width = parseInt(req.params.width) || 800;
-    const height = parseInt(req.params.height) || 600;
+  const width = parseInt(req.params.width) || 800;
+  const height = parseInt(req.params.height) || 600;
+  const category = (req.query.category as string) || "nature";
+  const seed = parseInt(req.query.seed as string) || 42;
+  const textQuery = req.query.text as string;
+  const format = (req.query.format as string) || "image";
+  const outputFormat = parseOutputFormat(req.query.output as string);
+  const prefer = (req.headers["prefer"] as string) || "";
 
-    const category = (req.query.category as string) || "nature";
-    const seed = parseInt(req.query.seed as string) || 42;
-    const textQuery = req.query.text as string;
-    const format = (req.query.format as string) || "image";
-    const outputFormat = parseOutputFormat(req.query.output as string);
-    const prefer = (req.headers["prefer"] as string) || "";
+  addLog("api", `[Request Received] GET /${width}/${height}?category=${category}&seed=${seed}&text=${textQuery || "none"}&format=${format}&output=${outputFormat}`);
 
-    addLog("api", `[Request Received] GET /${width}/${height}?category=${category}&seed=${seed}&text=${textQuery || "none"}&format=${format}&output=${outputFormat}`);
-
+  const serveImage = async (timedOut = false) => {
     const currentImages = await getImages();
     let matchedImage: ImageDocument | null = null;
     let similarityScore = 0;
-    let vector: number[] = [];
+    let isFallback = timedOut;
 
-    if (textQuery) {
+    if (!timedOut && textQuery) {
       addLog("api", `[Phase 2] Computing query embedding vector...`);
-      vector = await getEmbeddingVector(textQuery);
+      const vector = await getEmbeddingVector(textQuery);
       addLog("api", `[Phase 2] Query vector: [${vector.slice(0, 3).join(", ")}... 128 dimensions]`);
-
       addLog("api", `[Phase 2] ArangoDB Vector Index: APPROX_NEAR_COSINE search across ${currentImages.length} documents...`);
       const closest = await findClosestImage(vector, currentImages);
       matchedImage = closest?.image || null;
       similarityScore = closest?.similarity || 0;
       addLog("api", `[Phase 2] Closest Match: "${matchedImage?.text}" | Cosine Similarity Score: ${similarityScore.toFixed(4)}`);
-    } else {
-      // Category and Seed match
+    } else if (!timedOut) {
       addLog("api", `[Phase 2] Searching by category: "${category}" and seed: ${seed}`);
-      
       const filtered = currentImages.filter(img => img.category.toLowerCase() === category.toLowerCase());
       if (filtered.length > 0) {
         filtered.sort((a, b) => Math.abs(a.seed - seed) - Math.abs(b.seed - seed));
@@ -1178,13 +1174,14 @@ app.get("/api/cdn/:width/:height", async (req, res) => {
 
     let finalImage = matchedImage || currentImages[0] || SEED_DATA[0];
     let cacheControl = "public, max-age=31536000";
-
     let triggerGeneration = false;
-    if (textQuery && similarityScore < 0.85) {
+    const provider = finalImage._key ? "DB" : "Seed";
+
+    if (!timedOut && textQuery && similarityScore < 0.85) {
       triggerGeneration = true;
+      isFallback = true;
 
       if (prefer.includes("respond-async")) {
-        // RFC 7240 — client accepts async. Return 202 immediately with poll location.
         const jobId = `cdn-${Math.random().toString(36).substring(2, 9)}`;
         addLog("api", `[Phase 3] Prefer: respond-async — returning 202, job ${jobId}`);
         generateImageAndSave(textQuery, category, seed)
@@ -1192,6 +1189,7 @@ app.get("/api/cdn/:width/:height", async (req, res) => {
           .catch(err => addLog("api", `[Phase 3 ERROR] Async job ${jobId} failed: ${(err as Error).message}`));
         res.setHeader("Location", `/api/cdn/${width}/${height}/status/${jobId}?text=${encodeURIComponent(textQuery)}&format=${format}&output=${outputFormat}`);
         res.setHeader("Retry-After", "5");
+        setFallbackHeaders(res, provider, similarityScore);
         return res.status(202).json({
           status: "accepted",
           jobId,
@@ -1205,16 +1203,17 @@ app.get("/api/cdn/:width/:height", async (req, res) => {
       generateImageAndSave(textQuery, category, seed)
         .then(() => addLog("api", `[Phase 3] Background generation complete for: "${textQuery}"`))
         .catch(err => addLog("api", `[Phase 3 ERROR] Background generation failed: ${(err as Error).message}`));
-    } else if (textQuery) {
+    } else if (!timedOut && textQuery) {
       addLog("api", `[Phase 4] Quality Match verified (Similarity: ${similarityScore.toFixed(4)} >= 0.85). Serving directly with long-lived Cache-Control.`);
     }
 
-    res.setHeader("Cache-Control", cacheControl);
-    res.setHeader("Vary", "Accept");  // allow CDN to cache separate jpg/webp/png per Accept header if used
+    res.setHeader("Cache-Control", timedOut ? "public, max-age=30" : cacheControl);
+    res.setHeader("Vary", "Accept");
     res.setHeader("ETag", `"${finalImage._key}-${outputFormat}"`);
     res.setHeader("X-Similarity-Score", similarityScore.toString());
     res.setHeader("X-Async-Generated", triggerGeneration ? "true" : "false");
     res.setHeader("X-Image-Key", finalImage._key);
+    if (isFallback) setFallbackHeaders(res, provider, similarityScore, timedOut);
 
     if (format === "blurhash") {
       addLog("api", `[Phase 4] Format requested: blurhash. Running native Wasm/TS Blurhash encoder...`);
@@ -1224,11 +1223,7 @@ app.get("/api/cdn/:width/:height", async (req, res) => {
         blurhash: simulatedBlurhash,
         sourceUrl: finalImage.sourceUrl,
         similarity: similarityScore,
-        metadata: {
-          key: finalImage._key,
-          prompt: finalImage.text,
-          seed: finalImage.seed
-        }
+        metadata: { key: finalImage._key, prompt: finalImage.text, seed: finalImage.seed }
       });
     }
 
@@ -1237,19 +1232,14 @@ app.get("/api/cdn/:width/:height", async (req, res) => {
       if (finalImage.variants && finalImage.variants.thumbnail) {
         const matches = finalImage.variants.thumbnail.match(/^data:([a-zA-Z0-9]+\/[a-zA-Z0-9-.+]+);base64,(.*)$/);
         if (matches && matches.length === 3) {
-          const mime = matches[1];
-          const buffer = Buffer.from(matches[2], "base64");
-          res.setHeader("Content-Type", mime);
-          return res.status(200).send(buffer);
+          res.setHeader("Content-Type", matches[1]);
+          return res.status(200).send(Buffer.from(matches[2], "base64"));
         }
       }
-      const lqipUrl = `${finalImage.sourceUrl}&w=40&auto=format&fit=crop&q=20&blur=10`;
-      return res.redirect(302, lqipUrl);
+      return res.redirect(302, `${finalImage.sourceUrl}&w=40&auto=format&fit=crop&q=20&blur=10`);
     }
 
-    // Serve custom base64 or S3 multi-variant images from database if available
     if (finalImage.variants) {
-      // Find closest resolution preset to requested dimensions
       let bestVariantName = "medium";
       let minDiff = Infinity;
       for (const [resName, dim] of Object.entries(RESOLUTIONS)) {
@@ -1257,7 +1247,6 @@ app.get("/api/cdn/:width/:height", async (req, res) => {
         if (diff < minDiff) { minDiff = diff; bestVariantName = resName; }
       }
 
-      // Check for pre-generated format variant first (zero conversion overhead)
       const fmtKey = outputFormat === "jpg" ? bestVariantName : `${bestVariantName}_${outputFormat}`;
       const preGenUrl = finalImage.variants[fmtKey];
       if (preGenUrl && (preGenUrl.startsWith("http") || preGenUrl.startsWith("s3://"))) {
@@ -1267,10 +1256,8 @@ app.get("/api/cdn/:width/:height", async (req, res) => {
       }
 
       const servedData = finalImage.variants[bestVariantName] || finalImage.variants.medium || finalImage.variants.original;
-
       if (servedData) {
         let rawBuffer: Buffer | null = null;
-
         if (servedData.startsWith("data:")) {
           const matches = servedData.match(/^data:[^;]+;base64,(.*)$/);
           if (matches) rawBuffer = Buffer.from(matches[1], "base64");
@@ -1283,11 +1270,9 @@ app.get("/api/cdn/:width/:height", async (req, res) => {
             return res.redirect(302, servedData);
           }
         }
-
         if (rawBuffer) {
           const converted = await convertBuffer(rawBuffer, outputFormat);
-          const mime = OUTPUT_MIME[outputFormat];
-          res.setHeader("Content-Type", mime);
+          res.setHeader("Content-Type", OUTPUT_MIME[outputFormat]);
           addLog("api", `[Phase 4] Delivery: Serving '${bestVariantName}' (${width}x${height}) as ${outputFormat} (${converted.length} bytes).`);
           return res.status(200).send(converted);
         }
@@ -1295,14 +1280,46 @@ app.get("/api/cdn/:width/:height", async (req, res) => {
     }
 
     addLog("api", `[Phase 4] Delivery: HTTP 302 Redirecting to Cloudflare Resizing Edge CDN.`);
-    const cdnUrl = `${finalImage.sourceUrl}&w=${width}&h=${height}&fit=crop&auto=format&q=80`;
-    return res.redirect(302, cdnUrl);
+    return res.redirect(302, `${finalImage.sourceUrl}&w=${width}&h=${height}&fit=crop&auto=format&q=80`);
+  };
 
+  try {
+    await Promise.race([
+      serveImage(false),
+      serveTimeout(SERVE_TIMEOUT_MS).catch(async () => {
+        if (!res.headersSent) {
+          addLog("api", `[TIMEOUT] Request exceeded ${SERVE_TIMEOUT_MS}ms — serving cached fallback`);
+          await serveImage(true);
+        }
+      })
+    ]);
   } catch (error) {
-    addLog("system", `[API ERROR] Failure serving request: ${(error as Error).message}`);
-    res.status(500).json({ error: "Internal Server Error", message: (error as Error).message });
+    if (!res.headersSent) {
+      addLog("system", `[API ERROR] Failure serving request: ${(error as Error).message}`);
+      res.status(500).json({ error: "Internal Server Error", message: (error as Error).message });
+    }
   }
 });
+
+// ==========================================
+// RESPONSE TIMEOUT HELPER
+// ==========================================
+
+const SERVE_TIMEOUT_MS = 3000;
+
+// Rejects after ms — used in Promise.race to enforce hard response deadline.
+function serveTimeout(ms: number): Promise<never> {
+  return new Promise((_, reject) =>
+    setTimeout(() => reject(new Error(`SERVE_TIMEOUT:${ms}ms`)), ms)
+  );
+}
+
+function setFallbackHeaders(res: any, provider: string, similarity: number, timedOut = false) {
+  res.setHeader("X-CDN-Fallback", "true");
+  res.setHeader("X-CDN-Provider", provider);
+  res.setHeader("X-CDN-Similarity", similarity.toFixed(4));
+  if (timedOut) res.setHeader("X-CDN-Timeout", "true");
+}
 
 // ==========================================
 // 5. SRCSET ENDPOINT
@@ -1322,35 +1339,37 @@ const SRCSET_WIDTHS: { resName: string; w: number }[] = [
 ];
 
 app.get("/api/cdn/srcset", async (req, res) => {
-  try {
-    const category = (req.query.category as string) || "nature";
-    const seed = parseInt(req.query.seed as string) || 42;
-    const textQuery = req.query.text as string;
-    const outputFormat = parseOutputFormat(req.query.output as string);
-    const prefer = req.headers["prefer"] || "";
+  const category = (req.query.category as string) || "nature";
+  const seed = parseInt(req.query.seed as string) || 42;
+  const textQuery = req.query.text as string;
+  const outputFormat = parseOutputFormat(req.query.output as string);
+  const prefer = req.headers["prefer"] || "";
 
-    addLog("api", `[srcset] GET /api/cdn/srcset?text=${textQuery || "none"}&output=${outputFormat}`);
+  addLog("api", `[srcset] GET /api/cdn/srcset?text=${textQuery || "none"}&output=${outputFormat}`);
 
+  const serveSrcset = async (timedOut = false) => {
     const currentImages = await getImages();
     let finalImage: ImageDocument | null = null;
     let similarityScore = 0;
     let asyncJobId: string | null = null;
+    let isFallback = timedOut;
 
-    if (textQuery) {
+    if (!timedOut && textQuery) {
       const vector = await getEmbeddingVector(textQuery);
       const closest = await findClosestImage(vector, currentImages);
       finalImage = closest?.image || null;
       similarityScore = closest?.similarity || 0;
 
       if (similarityScore < 0.85) {
+        isFallback = true;
         if (prefer.includes("respond-async")) {
-          // 202 — kick off background generation, return job location
           const jobId = `srcset-${Math.random().toString(36).substring(2, 9)}`;
           asyncJobId = jobId;
           generateImageAndSave(textQuery, category, seed)
             .then(() => addLog("api", `[srcset async] Generation complete for job ${jobId}: "${textQuery}"`))
             .catch(err => addLog("api", `[srcset async] Generation failed for job ${jobId}: ${(err as Error).message}`));
           res.setHeader("Location", `/api/cdn/srcset/status/${jobId}?text=${encodeURIComponent(textQuery)}&output=${outputFormat}`);
+          setFallbackHeaders(res, "DB", similarityScore);
           return res.status(202).json({
             status: "accepted",
             jobId,
@@ -1358,7 +1377,6 @@ app.get("/api/cdn/srcset", async (req, res) => {
             fallback: buildSrcsetPayload(finalImage || currentImages[0], outputFormat, similarityScore, true)
           });
         }
-        // Stale-while-revalidate — return best match, generate in background
         generateImageAndSave(textQuery, category, seed)
           .then(() => addLog("api", `[srcset] Background generation complete for: "${textQuery}"`))
           .catch(err => addLog("api", `[srcset] Background generation failed: ${(err as Error).message}`));
@@ -1366,7 +1384,7 @@ app.get("/api/cdn/srcset", async (req, res) => {
       } else {
         res.setHeader("Cache-Control", "public, max-age=31536000");
       }
-    } else {
+    } else if (!timedOut) {
       const filtered = currentImages.filter(img => img.category.toLowerCase() === category.toLowerCase());
       if (filtered.length > 0) {
         filtered.sort((a, b) => Math.abs(a.seed - seed) - Math.abs(b.seed - seed));
@@ -1382,11 +1400,28 @@ app.get("/api/cdn/srcset", async (req, res) => {
     res.setHeader("Vary", "Accept");
     res.setHeader("X-Similarity-Score", similarityScore.toString());
     res.setHeader("X-Async-Generated", asyncJobId ? "pending" : "false");
-    return res.status(200).json(buildSrcsetPayload(image, outputFormat, similarityScore, false));
+    if (isFallback) {
+      setFallbackHeaders(res, "DB", similarityScore, timedOut);
+      res.setHeader("Cache-Control", timedOut ? "public, max-age=30" : "public, max-age=60, stale-while-revalidate=86400");
+    }
+    return res.status(200).json(buildSrcsetPayload(image, outputFormat, similarityScore, isFallback));
+  };
 
+  try {
+    await Promise.race([
+      serveSrcset(false),
+      serveTimeout(SERVE_TIMEOUT_MS).catch(async () => {
+        if (!res.headersSent) {
+          addLog("api", `[TIMEOUT] srcset exceeded ${SERVE_TIMEOUT_MS}ms — serving cached fallback`);
+          await serveSrcset(true);
+        }
+      })
+    ]);
   } catch (error) {
-    addLog("system", `[srcset ERROR] ${(error as Error).message}`);
-    res.status(500).json({ error: "Internal Server Error", message: (error as Error).message });
+    if (!res.headersSent) {
+      addLog("system", `[srcset ERROR] ${(error as Error).message}`);
+      res.status(500).json({ error: "Internal Server Error", message: (error as Error).message });
+    }
   }
 });
 
