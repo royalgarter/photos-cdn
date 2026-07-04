@@ -7,6 +7,7 @@
 import { Buffer } from "node:buffer";
 import { Jimp } from "jimp";
 import sharp from "sharp";
+import { matchCategory } from "../providers/static-photos.ts";
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -133,29 +134,6 @@ async function fetchPicjumboRSS(): Promise<RawPhoto[]> {
   return items.slice(0, 20);
 }
 
-// ── Category inference from alt text ─────────────────────────────────────────
-
-const CAT_KEYWORDS: [string, string[]][] = [
-  ["technology",   ["tech", "computer", "phone", "digital", "code", "device", "robot", "ai"]],
-  ["office",       ["office", "desk", "work", "business", "meeting", "corporate"]],
-  ["food",         ["food", "meal", "eat", "restaurant", "cook", "dish", "fruit", "vegetable"]],
-  ["travel",       ["travel", "trip", "tourism", "vacation", "destination", "adventure"]],
-  ["people",       ["person", "people", "man", "woman", "child", "portrait", "face", "crowd"]],
-  ["cityscape",    ["city", "urban", "street", "building", "skyline", "architecture"]],
-  ["nature",       ["nature", "forest", "mountain", "lake", "water", "tree", "flower", "sky"]],
-  ["animals",      ["animal", "bird", "dog", "cat", "wildlife", "fish", "horse"]],
-  ["abstract",     ["abstract", "art", "pattern", "color", "texture", "design"]],
-  ["wellness",     ["yoga", "fitness", "meditation", "spa", "health", "relax"]],
-];
-
-function inferCategory(alt: string, providerCategory: string): string {
-  const lower = alt.toLowerCase();
-  for (const [cat, words] of CAT_KEYWORDS) {
-    if (words.some(w => lower.includes(w))) return cat;
-  }
-  return providerCategory || "nature";
-}
-
 // ── Core indexing logic ───────────────────────────────────────────────────────
 
 const PHOTO_TIMEOUT_MS = 60_000; // 1 minute per photo
@@ -186,7 +164,7 @@ async function _indexPhotoCore(
     if (!imgRes.ok) return { result: "error" };
 
     const raw = Buffer.from(await imgRes.arrayBuffer());
-    const category = inferCategory(photo.alt, photo.category);
+    const category = matchCategory(`${photo.alt} ${photo.category}`);
     const text = `${photo.alt} ${category} ${photo.provider}`.toLowerCase();
     const embedding = await deps.getEmbeddingVector(text);
 

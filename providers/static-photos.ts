@@ -51,7 +51,7 @@ const CATEGORIES: { slug: string; keywords: string[] }[] = [
   { slug: "education",    keywords: ["education", "school", "learn", "study", "book", "classroom", "student", "teacher", "university", "college"] },
 ];
 
-function matchCategory(prompt: string): string {
+export function matchCategory(prompt: string): string {
   const lower = prompt.toLowerCase();
   const words = new Set(lower.split(/\W+/));
 
