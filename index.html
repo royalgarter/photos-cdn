@@ -1006,6 +1006,38 @@ if (res.status === 202) {
                     </div>
                   </div>
 
+                  <!-- Section: Fallback Image Providers -->
+                  <div class="space-y-4">
+                    <h3 class="text-xs font-bold text-gray-800 uppercase tracking-wider font-mono border-b border-gray-200 pb-1.5 flex items-center gap-1.5">
+                      <span class="h-2 w-2 bg-green-500"></span>
+                      Fallback Image Providers
+                    </h3>
+                    <p class="text-xs text-gray-400">Used when no matching image exists in the database. Chain order: Pexels → Unsplash → static.photos → Picsum → classic seeds.</p>
+
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <label class="text-xs font-semibold text-gray-700 block mb-1">Pexels API Key <span class="text-gray-400 font-normal">(optional)</span></label>
+                        <input
+                          type="password"
+                          x-model="settings.pexelsApiKey"
+                          placeholder="Leave empty to skip Pexels"
+                          class="w-full bg-white border border-gray-300 px-3 py-2 text-xs font-mono text-gray-900 focus:outline-none focus:border-blue-500"
+                        />
+                        <p class="text-xs text-gray-400 mt-1">Free tier: 200 req/hr. <a href="https://www.pexels.com/api/" target="_blank" class="text-blue-500 hover:underline">Get key ↗</a></p>
+                      </div>
+                      <div>
+                        <label class="text-xs font-semibold text-gray-700 block mb-1">Unsplash Access Key <span class="text-gray-400 font-normal">(optional)</span></label>
+                        <input
+                          type="password"
+                          x-model="settings.unsplashAccessKey"
+                          placeholder="Leave empty to skip Unsplash"
+                          class="w-full bg-white border border-gray-300 px-3 py-2 text-xs font-mono text-gray-900 focus:outline-none focus:border-blue-500"
+                        />
+                        <p class="text-xs text-gray-400 mt-1">Free tier: 50 req/hr. <a href="https://unsplash.com/developers" target="_blank" class="text-blue-500 hover:underline">Get key ↗</a></p>
+                      </div>
+                    </div>
+                  </div>
+
                   <!-- Section: Storage Bucket -->
                   <div class="space-y-4">
                     <h3 class="text-xs font-bold text-gray-800 uppercase tracking-wider font-mono border-b border-gray-200 pb-1.5 flex items-center gap-1.5">

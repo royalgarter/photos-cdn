@@ -6,6 +6,9 @@ import sharp from "sharp";
 import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
 import { StaticPhotosProvider } from "./providers/static-photos.ts";
 import { ClassicSeedsProvider } from "./providers/classic-seeds.ts";
+import { PexelsProvider } from "./providers/pexels.ts";
+import { UnsplashProvider } from "./providers/unsplash.ts";
+import { PicsumProvider } from "./providers/picsum.ts";
 import type { FallbackProvider } from "./providers/types.ts";
 
 const app = express();
@@ -59,6 +62,9 @@ interface AppSettings {
   cfApiToken: string;
   hfApiToken: string;
   cdnDomain: string;
+  // Fallback image providers
+  pexelsApiKey: string;
+  unsplashAccessKey: string;
   // placeholder: stabilityApiKey: string;
   // placeholder: openaiApiKey: string;
 }
@@ -357,7 +363,9 @@ async function connectToArango() {
         cfAccountId: "",
         cfApiToken: "",
         hfApiToken: "",
-        cdnDomain: ""
+        cdnDomain: "",
+        pexelsApiKey: process.env.PEXELS_API_KEY || "",
+        unsplashAccessKey: process.env.UNSPLASH_ACCESS_KEY || ""
       });
       addLog("system", "ArangoDB 'Settings' collection initialized with default configuration structure.");
     } else {
@@ -405,7 +413,9 @@ async function getSettings(): Promise<AppSettings> {
     cfAccountId: doc.cfAccountId || "",
     cfApiToken: doc.cfApiToken || "",
     hfApiToken: doc.hfApiToken || "",
-    cdnDomain: doc.cdnDomain || ""
+    cdnDomain: doc.cdnDomain || "",
+    pexelsApiKey: doc.pexelsApiKey || "",
+    unsplashAccessKey: doc.unsplashAccessKey || ""
   };
 }
 
@@ -657,7 +667,20 @@ async function uploadToS3(
 }
 
 const FALLBACK_CHAIN: FallbackProvider[] = [
+  // Keyed providers first — highest quality, real search results
+  new PexelsProvider(async () => {
+    const s = await getSettings().catch(() => ({} as any));
+    return s.pexelsApiKey || process.env.PEXELS_API_KEY;
+  }),
+  new UnsplashProvider(async () => {
+    const s = await getSettings().catch(() => ({} as any));
+    return s.unsplashAccessKey || process.env.UNSPLASH_ACCESS_KEY;
+  }),
+  // Static.photos — no key, category-mapped
   new StaticPhotosProvider(),
+  // Keyless deterministic fallbacks
+  new PicsumProvider(),
+  // Classic hardcoded seeds as last resort
   new ClassicSeedsProvider(getSimulatedVector, cosineSimilarity),
 ];
 
