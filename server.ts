@@ -355,6 +355,8 @@ async function addImage(img: ImageDocument): Promise<void> {
   addLog("system", `ArangoDB: Inserted document '${img._key}'`);
 }
 
+const MIN_SIMILARITY = 0.3; // below this, no match — serve fallback provider instead
+
 // Vector index search — uses APPROX_NEAR_COSINE, falls back to JS cosine scan
 async function findClosestImage(queryVec: number[], allImages: ImageDocument[]): Promise<{ image: ImageDocument; similarity: number } | null> {
   if (!arangoDb) return null;
@@ -370,7 +372,7 @@ async function findClosestImage(queryVec: number[], allImages: ImageDocument[]):
       bindVars: { vec: queryVec }
     });
     const result = await cursor.next() as (ImageDocument & { _score: number }) | undefined;
-    if (result) {
+    if (result && result._score >= MIN_SIMILARITY) {
       return { image: result, similarity: result._score };
     }
   } catch (err) {
@@ -384,7 +386,8 @@ async function findClosestImage(queryVec: number[], allImages: ImageDocument[]):
     const sim = cosineSimilarity(queryVec, img.embedding);
     if (sim > maxSim) { maxSim = sim; best = img; }
   }
-  return best ? { image: best, similarity: maxSim } : null;
+  if (!best || maxSim < MIN_SIMILARITY) return null;
+  return { image: best, similarity: maxSim };
 }
 
 // Reset Database Layer
