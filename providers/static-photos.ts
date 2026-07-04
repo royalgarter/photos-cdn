@@ -21,6 +21,16 @@ export function matchCategory(prompt: string): string {
   return matchGenre(prompt).staticSlug;
 }
 
+// Applies genre's promptTemplate if set; falls back to original prompt.
+// Template uses "{prompt}" as placeholder for the original prompt.
+export function applyGenreTemplate(prompt: string): { adjustedPrompt: string; genre: string; staticSlug: string } {
+  const { genre, staticSlug } = matchGenre(prompt);
+  const genreEntry = GENRES.find(g => g.slug === genre);
+  const template = genreEntry?.promptTemplate;
+  const adjustedPrompt = template ? template.replace("{prompt}", prompt) : prompt;
+  return { adjustedPrompt, genre, staticSlug };
+}
+
 export class StaticPhotosProvider implements FallbackProvider {
   readonly name = "StaticPhotos";
 

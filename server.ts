@@ -4,7 +4,7 @@ import { Database } from "arangojs";
 import { Jimp } from "jimp";
 import sharp from "sharp";
 import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
-import { StaticPhotosProvider, matchGenre } from "./providers/static-photos.ts";
+import { StaticPhotosProvider, matchGenre, applyGenreTemplate } from "./providers/static-photos.ts";
 import { PexelsProvider } from "./providers/pexels.ts";
 import { UnsplashProvider } from "./providers/unsplash.ts";
 import { PicsumProvider } from "./providers/picsum.ts";
@@ -776,25 +776,33 @@ async function generateImageWithFallback(
   baseImg: { buffer: Buffer; mimeType: string; provider: string } | null,
   settings: AppSettings
 ): Promise<string> {
+  // Adjust prompt by matched genre's template before generating
+  const { adjustedPrompt, genre, staticSlug } = applyGenreTemplate(prompt);
+  if (adjustedPrompt !== prompt) {
+    addLog("queue", `[Provider Chain] Genre "${genre}" (${staticSlug}) adjusted prompt: "${adjustedPrompt.slice(0, 100)}"`);
+  } else {
+    addLog("queue", `[Provider Chain] Genre "${genre}" (${staticSlug}) — no template, using original prompt`);
+  }
+
   // Provider chain — add new providers here in priority order
   const geminiKey = settings.geminiApiKey || process.env.GEMINI_API_KEY;
   if (geminiKey) {
-    const result = await generateWithGemini(prompt, baseImg, geminiKey);
+    const result = await generateWithGemini(adjustedPrompt, baseImg, geminiKey);
     if (result) return result.base64Image;
     addLog("queue", `[Provider Chain] Gemini failed, trying next provider...`);
   } else {
     addLog("queue", `[Provider Chain] Gemini skipped — no API key.`);
   }
 
-  const cfResult = await generateWithCloudflareAI(prompt, settings);
+  const cfResult = await generateWithCloudflareAI(adjustedPrompt, settings);
   if (cfResult) return cfResult.base64Image;
   addLog("queue", `[Provider Chain] Cloudflare AI failed or unconfigured, trying next provider...`);
 
-  const pollinationsResult = await generateWithPollinations(prompt);
+  const pollinationsResult = await generateWithPollinations(adjustedPrompt);
   if (pollinationsResult) return pollinationsResult.base64Image;
   addLog("queue", `[Provider Chain] Pollinations.ai failed, trying next provider...`);
 
-  const hfResult = await generateWithHuggingFace(prompt, settings);
+  const hfResult = await generateWithHuggingFace(adjustedPrompt, settings);
   if (hfResult) return hfResult.base64Image;
   addLog("queue", `[Provider Chain] HuggingFace failed, trying next provider...`);
 
