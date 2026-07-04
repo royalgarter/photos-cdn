@@ -7,6 +7,7 @@
 import { Buffer } from "node:buffer";
 import { Jimp } from "jimp";
 import sharp from "sharp";
+import { matchCategory } from "../providers/static-photos.ts";
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -133,42 +134,21 @@ async function fetchPicjumboRSS(): Promise<RawPhoto[]> {
   return items.slice(0, 20);
 }
 
-// ── Category inference from alt text ─────────────────────────────────────────
-
-const CAT_KEYWORDS: [string, string[]][] = [
-  ["technology",   ["tech", "computer", "phone", "digital", "code", "device", "robot", "ai"]],
-  ["office",       ["office", "desk", "work", "business", "meeting", "corporate"]],
-  ["food",         ["food", "meal", "eat", "restaurant", "cook", "dish", "fruit", "vegetable"]],
-  ["travel",       ["travel", "trip", "tourism", "vacation", "destination", "adventure"]],
-  ["people",       ["person", "people", "man", "woman", "child", "portrait", "face", "crowd"]],
-  ["cityscape",    ["city", "urban", "street", "building", "skyline", "architecture"]],
-  ["nature",       ["nature", "forest", "mountain", "lake", "water", "tree", "flower", "sky"]],
-  ["animals",      ["animal", "bird", "dog", "cat", "wildlife", "fish", "horse"]],
-  ["abstract",     ["abstract", "art", "pattern", "color", "texture", "design"]],
-  ["wellness",     ["yoga", "fitness", "meditation", "spa", "health", "relax"]],
-];
-
-function inferCategory(alt: string, providerCategory: string): string {
-  const lower = alt.toLowerCase();
-  for (const [cat, words] of CAT_KEYWORDS) {
-    if (words.some(w => lower.includes(w))) return cat;
-  }
-  return providerCategory || "nature";
-}
-
 // ── Core indexing logic ───────────────────────────────────────────────────────
 
-const PHOTO_TIMEOUT_MS = 20_000;
+const PHOTO_TIMEOUT_MS = 60_000; // 1 minute per photo
 
 async function indexPhoto(
   photo: RawPhoto,
   deps: IndexerDeps,
   settings: any,
   existingUrls: Set<string>
-): Promise<"indexed" | "skipped" | "error"> {
-  if (existingUrls.has(photo.sourceUrl)) return "skipped";
+): Promise<{ result: "indexed" | "skipped" | "error"; cdnUrl?: string }> {
+  if (existingUrls.has(photo.sourceUrl)) return { result: "skipped" };
 
-  const timeout = new Promise<"error">((resolve) => setTimeout(() => resolve("error"), PHOTO_TIMEOUT_MS));
+  const timeout = new Promise<{ result: "error" }>((resolve) =>
+    setTimeout(() => resolve({ result: "error" }), PHOTO_TIMEOUT_MS)
+  );
 
   return Promise.race([_indexPhotoCore(photo, deps, settings, existingUrls), timeout]);
 }
@@ -178,13 +158,13 @@ async function _indexPhotoCore(
   deps: IndexerDeps,
   settings: any,
   existingUrls: Set<string>
-): Promise<"indexed" | "skipped" | "error"> {
+): Promise<{ result: "indexed" | "skipped" | "error"; cdnUrl?: string }> {
   try {
     const imgRes = await fetch(photo.sourceUrl, { signal: AbortSignal.timeout(12000) });
-    if (!imgRes.ok) return "error";
+    if (!imgRes.ok) return { result: "error" };
 
     const raw = Buffer.from(await imgRes.arrayBuffer());
-    const category = inferCategory(photo.alt, photo.category);
+    const category = matchCategory(`${photo.alt} ${photo.category}`);
     const text = `${photo.alt} ${category} ${photo.provider}`.toLowerCase();
     const embedding = await deps.getEmbeddingVector(text);
 
@@ -225,21 +205,19 @@ async function _indexPhotoCore(
     });
 
     existingUrls.add(photo.sourceUrl);
-    deps.addLog("system", `[Indexer] Saved ${key} from ${photo.provider}: "${photo.alt.slice(0, 60)}"`);
-    return "indexed";
+    const cdnUrl = variants["800x600"] || variants["1200x630"] || Object.values(variants)[0] || "";
+    deps.addLog("system", `[Indexer] Saved ${key} from ${photo.provider}: "${photo.alt.slice(0, 60)}" → ${cdnUrl}`);
+    return { result: "indexed", cdnUrl };
   } catch (err) {
     deps.addLog("system", `[Indexer] Error indexing ${photo.sourceUrl}: ${(err as Error).message}`);
-    return "error";
+    return { result: "error" };
   }
 }
 
 // ── Main run function ─────────────────────────────────────────────────────────
 
-const RUN_TIMEOUT_MS = 4 * 60 * 1000; // 4-minute hard cap
-
 export async function runDailyIndexer(deps: IndexerDeps): Promise<IndexerResult> {
   const start = Date.now();
-  const deadline = start + RUN_TIMEOUT_MS;
   deps.addLog("system", "[Indexer] Daily scan started");
 
   const settings = await deps.getSettings();
@@ -271,21 +249,27 @@ export async function runDailyIndexer(deps: IndexerDeps): Promise<IndexerResult>
   // Process with concurrency limit (4 at a time to avoid hammering S3/APIs)
   const CONCURRENCY = 4;
   for (let i = 0; i < allPhotos.length; i += CONCURRENCY) {
-    if (Date.now() >= deadline) {
-      deps.addLog("system", `[Indexer] 4-minute deadline reached — stopping at batch ${i}/${allPhotos.length}`);
-      break;
-    }
     const batch = allPhotos.slice(i, i + CONCURRENCY);
-    const results = await Promise.all(
+    const batchNum = Math.floor(i / CONCURRENCY) + 1;
+    const totalBatches = Math.ceil(allPhotos.length / CONCURRENCY);
+    console.log(`[Indexer] Batch ${batchNum}/${totalBatches} — photos ${i + 1}-${Math.min(i + CONCURRENCY, allPhotos.length)}/${allPhotos.length} (indexed:${totalIndexed} skipped:${totalSkipped} errors:${totalErrors})`);
+
+    const outcomes = await Promise.all(
       batch.map(photo => indexPhoto(photo, deps, settings, existingUrls))
     );
     for (let j = 0; j < batch.length; j++) {
       const p = batch[j].provider;
       if (!byProvider[p]) byProvider[p] = { indexed: 0, skipped: 0, errors: 0 };
-      const r = results[j];
-      if (r === "indexed") { byProvider[p].indexed++; totalIndexed++; }
-      else if (r === "skipped") { byProvider[p].skipped++; totalSkipped++; }
-      else { byProvider[p].errors++; totalErrors++; }
+      const { result: r, cdnUrl } = outcomes[j];
+      if (r === "indexed") {
+        byProvider[p].indexed++; totalIndexed++;
+        console.log(`[Indexer] ✓ [${p}] ${batch[j].alt.slice(0, 60)} → ${cdnUrl}`);
+      } else if (r === "skipped") {
+        byProvider[p].skipped++; totalSkipped++;
+      } else {
+        byProvider[p].errors++; totalErrors++;
+        console.log(`[Indexer] ✗ [${p}] timeout/error: ${batch[j].sourceUrl.slice(0, 80)}`);
+      }
     }
   }
 
