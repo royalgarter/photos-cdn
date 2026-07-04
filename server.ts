@@ -11,6 +11,7 @@ import { UnsplashProvider } from "./providers/unsplash.ts";
 import { PicsumProvider } from "./providers/picsum.ts";
 import { WallhavenProvider } from "./providers/wallhaven.ts";
 import type { FallbackProvider } from "./providers/types.ts";
+import { startDailyIndexer, runDailyIndexer, type IndexerStatus } from "./workers/daily-indexer.ts";
 
 const app = express();
 const PORT = parseInt(process.env.PORT || "34070");
@@ -67,6 +68,7 @@ interface AppSettings {
   pexelsApiKey: string;
   unsplashAccessKey: string;
   wallhavenApiKey: string;
+  pixabayApiKey: string;
   // placeholder: stabilityApiKey: string;
   // placeholder: openaiApiKey: string;
 }
@@ -368,7 +370,8 @@ async function connectToArango() {
         cdnDomain: "",
         pexelsApiKey: process.env.PEXELS_API_KEY || "",
         unsplashAccessKey: process.env.UNSPLASH_ACCESS_KEY || "",
-        wallhavenApiKey: process.env.WALLHAVEN_API_KEY || ""
+        wallhavenApiKey: process.env.WALLHAVEN_API_KEY || "",
+        pixabayApiKey: process.env.PIXABAY_API_KEY || ""
       });
       addLog("system", "ArangoDB 'Settings' collection initialized with default configuration structure.");
     } else {
@@ -419,7 +422,8 @@ async function getSettings(): Promise<AppSettings> {
     cdnDomain: doc.cdnDomain || "",
     pexelsApiKey: doc.pexelsApiKey || "",
     unsplashAccessKey: doc.unsplashAccessKey || "",
-    wallhavenApiKey: doc.wallhavenApiKey || ""
+    wallhavenApiKey: doc.wallhavenApiKey || "",
+    pixabayApiKey: doc.pixabayApiKey || ""
   };
 }
 
@@ -1530,11 +1534,49 @@ function buildSrcsetPayload(image: ImageDocument, fmt: OutputFormat, similarity:
 }
 
 // ==========================================
-// 6. RESPOND-ASYNC ON MAIN CDN ENDPOINT
+// 6. DAILY INDEXER WORKER
 // ==========================================
 
-// Patch the CDN endpoint to also support Prefer: respond-async
-// (handled inline in the CDN route via the prefer header check below)
+let indexerStatus: IndexerStatus | null = null;
+
+function getIndexerDeps() {
+  return {
+    getSettings,
+    getImages,
+    addImage,
+    getEmbeddingVector,
+    uploadToS3,
+    compressImage,
+    convertBuffer,
+    addLog,
+    RESOLUTIONS,
+  };
+}
+
+app.get("/api/indexer/status", (_req, res) => {
+  res.json(indexerStatus || { running: false, lastRun: null, lastResult: null, nextRun: null });
+});
+
+app.post("/api/indexer/trigger", async (_req, res) => {
+  if (indexerStatus?.running) {
+    return res.status(409).json({ error: "Indexer already running" });
+  }
+  res.json({ status: "started", message: "Daily indexer triggered manually" });
+  // Run in background — don't await
+  if (indexerStatus) indexerStatus.running = true;
+  runDailyIndexer(getIndexerDeps())
+    .then(result => {
+      if (indexerStatus) {
+        indexerStatus.running = false;
+        indexerStatus.lastRun = new Date().toISOString();
+        indexerStatus.lastResult = result;
+      }
+    })
+    .catch(err => {
+      if (indexerStatus) indexerStatus.running = false;
+      addLog("system", `[Indexer] Manual trigger error: ${(err as Error).message}`);
+    });
+});
 
 // ==========================================
 // 7. STATIC FILES & SERVING
@@ -1543,6 +1585,10 @@ function buildSrcsetPayload(image: ImageDocument, fmt: OutputFormat, similarity:
 async function startServer() {
   // Connect/Verify ArangoDB connection on startup
   await connectToArango();
+
+  // Start daily indexer (fires 30s after startup, then every 24h)
+  indexerStatus = startDailyIndexer(getIndexerDeps());
+  addLog("system", `[Indexer] Scheduled — first run in 30s, then every 24h. Next: ${indexerStatus.nextRun}`);
 
   addLog("system", "Starting development server, serving static files directly...");
   // Serve files from the current working directory
