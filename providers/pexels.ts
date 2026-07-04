@@ -1,5 +1,6 @@
 import { Buffer } from "node:buffer";
 import type { FallbackProvider, FallbackResult } from "./types.ts";
+import { matchGenre } from "./static-photos.ts";
 
 // Maps a prompt to a Pexels search query (just the prompt itself works well)
 export class PexelsProvider implements FallbackProvider {
@@ -34,7 +35,8 @@ export class PexelsProvider implements FallbackProvider {
 
       const buffer = Buffer.from(await imgRes.arrayBuffer());
       const mimeType = imgRes.headers.get("Content-Type") || "image/jpeg";
-      return { buffer, mimeType, provider: "Pexels", sourceUrl: imgUrl };
+      const { genre, staticSlug } = matchGenre(prompt);
+      return { buffer, mimeType, provider: "Pexels", sourceUrl: imgUrl, genre, staticSlug };
     } catch {
       return null;
     }

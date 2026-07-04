@@ -2,24 +2,23 @@ import { Buffer } from "node:buffer";
 import type { FallbackProvider, FallbackResult } from "./types.ts";
 import { GENRES } from "./types.ts";
 
-// matchCategory scores prompt against all 106 GENRES and returns the best staticSlug
-export function matchCategory(prompt: string): string {
+export function matchGenre(prompt: string): { genre: string; staticSlug: string } {
   const lower = prompt.toLowerCase();
   const words = new Set(lower.split(/\W+/));
-
-  let best = { staticSlug: "nature", score: 0 };
-  for (const genre of GENRES) {
+  let best = { genre: "nature", staticSlug: "nature", score: 0 };
+  for (const g of GENRES) {
     let score = 0;
-    for (const kw of genre.keywords) {
-      if (kw.includes(" ")) {
-        if (lower.includes(kw)) score += 2;
-      } else if (words.has(kw)) {
-        score += 1;
-      }
+    for (const kw of g.keywords) {
+      if (kw.includes(" ")) { if (lower.includes(kw)) score += 2; }
+      else if (words.has(kw)) score += 1;
     }
-    if (score > best.score) best = { staticSlug: genre.staticSlug, score };
+    if (score > best.score) best = { genre: g.slug, staticSlug: g.staticSlug, score };
   }
-  return best.staticSlug;
+  return best;
+}
+
+export function matchCategory(prompt: string): string {
+  return matchGenre(prompt).staticSlug;
 }
 
 export class StaticPhotosProvider implements FallbackProvider {
@@ -37,7 +36,8 @@ export class StaticPhotosProvider implements FallbackProvider {
       const arrayBuffer = await response.arrayBuffer();
       const buffer = Buffer.from(arrayBuffer);
       const mimeType = response.headers.get("Content-Type") || "image/jpeg";
-      return { buffer, mimeType, provider: `StaticPhotos(${category})`, sourceUrl: url };
+      const { genre, staticSlug } = matchGenre(prompt);
+      return { buffer, mimeType, provider: `StaticPhotos(${category})`, sourceUrl: url, genre, staticSlug };
     } catch (err) {
       return null;
     }

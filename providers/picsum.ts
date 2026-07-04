@@ -1,5 +1,6 @@
 import { Buffer } from "node:buffer";
 import type { FallbackProvider, FallbackResult } from "./types.ts";
+import { matchGenre } from "./static-photos.ts";
 
 // Picsum Photos — no API key needed.
 // Uses prompt as seed so same prompt → same deterministic image.
@@ -15,7 +16,8 @@ export class PicsumProvider implements FallbackProvider {
       if (!res.ok) return null;
       const buffer = Buffer.from(await res.arrayBuffer());
       const mimeType = res.headers.get("Content-Type") || "image/jpeg";
-      return { buffer, mimeType, provider: "Picsum", sourceUrl: res.url };
+      const { genre, staticSlug } = matchGenre(prompt);
+      return { buffer, mimeType, provider: "Picsum", sourceUrl: res.url, genre, staticSlug };
     } catch {
       return null;
     }

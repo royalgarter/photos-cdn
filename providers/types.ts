@@ -5,6 +5,8 @@ export interface FallbackResult {
   mimeType: string;
   provider: string;
   sourceUrl: string;
+  genre: string;       // matched genre slug from GENRES
+  staticSlug: string;  // static.photos slug used for category
 }
 
 export interface FallbackProvider {

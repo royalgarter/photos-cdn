@@ -1,5 +1,6 @@
 import { Buffer } from "node:buffer";
 import type { FallbackProvider, FallbackResult } from "./types.ts";
+import { matchGenre } from "./static-photos.ts";
 
 export class UnsplashProvider implements FallbackProvider {
   readonly name = "Unsplash";
@@ -40,7 +41,8 @@ export class UnsplashProvider implements FallbackProvider {
 
       const buffer = Buffer.from(await imgRes.arrayBuffer());
       const mimeType = imgRes.headers.get("Content-Type") || "image/jpeg";
-      return { buffer, mimeType, provider: "Unsplash", sourceUrl: imgUrl };
+      const { genre, staticSlug } = matchGenre(prompt);
+      return { buffer, mimeType, provider: "Unsplash", sourceUrl: imgUrl, genre, staticSlug };
     } catch {
       return null;
     }

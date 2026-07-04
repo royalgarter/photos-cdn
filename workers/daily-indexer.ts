@@ -7,7 +7,7 @@
 import { Buffer } from "node:buffer";
 import { Jimp } from "jimp";
 import sharp from "sharp";
-import { matchCategory } from "../providers/static-photos.ts";
+import { matchGenre } from "../providers/static-photos.ts";
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -164,7 +164,7 @@ async function _indexPhotoCore(
     if (!imgRes.ok) return { result: "error" };
 
     const raw = Buffer.from(await imgRes.arrayBuffer());
-    const category = matchCategory(`${photo.alt} ${photo.category}`);
+    const { genre, staticSlug: category } = matchGenre(`${photo.alt} ${photo.category}`);
     const text = `${photo.alt} ${category} ${photo.provider}`.toLowerCase();
     const embedding = await deps.getEmbeddingVector(text);
 
@@ -196,6 +196,7 @@ async function _indexPhotoCore(
       _key: key,
       sourceUrl: photo.sourceUrl,
       category,
+      genre,
       text,
       embedding,
       seed: Math.floor(Math.random() * 10000),
