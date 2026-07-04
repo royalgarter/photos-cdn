@@ -1,5 +1,6 @@
 import { Buffer } from "node:buffer";
 import type { FallbackProvider, FallbackResult } from "./types.ts";
+import { matchGenre } from "./static-photos.ts";
 
 export class WallhavenProvider implements FallbackProvider {
   readonly name = "Wallhaven";
@@ -33,7 +34,8 @@ export class WallhavenProvider implements FallbackProvider {
 
       const buffer = Buffer.from(await imgRes.arrayBuffer());
       const mimeType = photo.file_type || imgRes.headers.get("Content-Type") || "image/jpeg";
-      return { buffer, mimeType, provider: "Wallhaven", sourceUrl: photo.path };
+      const { genre, staticSlug } = matchGenre(prompt);
+      return { buffer, mimeType, provider: "Wallhaven", sourceUrl: photo.path, genre, staticSlug };
     } catch {
       return null;
     }

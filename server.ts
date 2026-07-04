@@ -4,7 +4,7 @@ import { Database } from "arangojs";
 import { Jimp } from "jimp";
 import sharp from "sharp";
 import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
-import { StaticPhotosProvider } from "./providers/static-photos.ts";
+import { StaticPhotosProvider, matchGenre, applyGenreTemplate } from "./providers/static-photos.ts";
 import { PexelsProvider } from "./providers/pexels.ts";
 import { UnsplashProvider } from "./providers/unsplash.ts";
 import { PicsumProvider } from "./providers/picsum.ts";
@@ -25,6 +25,7 @@ interface ImageDocument {
   _key: string;
   sourceUrl: string;
   category: string;
+  genre?: string;
   text: string;
   embedding: number[];
   seed: number;
@@ -553,12 +554,12 @@ const FALLBACK_CHAIN: FallbackProvider[] = [
   new PicsumProvider(),
 ];
 
-async function fetchBaseImage(prompt: string, promptVector: number[]): Promise<{ buffer: Buffer; mimeType: string; provider: string; sourceUrl: string } | null> {
+async function fetchBaseImage(prompt: string, promptVector: number[]): Promise<{ buffer: Buffer; mimeType: string; provider: string; sourceUrl: string; genre: string; staticSlug: string } | null> {
   for (const provider of FALLBACK_CHAIN) {
     try {
       const result = await provider.fetch(prompt, promptVector);
       if (result) {
-        addLog("queue", `[Phase 2] Fallback provider "${provider.name}" succeeded (${result.buffer.length} bytes)`);
+        addLog("queue", `[Phase 2] Fallback provider "${provider.name}" succeeded (${result.buffer.length} bytes) genre=${result.genre}`);
         return result;
       }
       addLog("queue", `[Phase 2] Fallback provider "${provider.name}" returned null, trying next`);
@@ -573,7 +574,8 @@ async function fetchBaseImage(prompt: string, promptVector: number[]): Promise<{
     if (response.ok) {
       const arrayBuffer = await response.arrayBuffer();
       const buffer = Buffer.from(arrayBuffer);
-      return { buffer, mimeType: "image/jpeg", provider: "Picsum (last-resort)", sourceUrl: url };
+      const { genre, staticSlug } = matchGenre(prompt);
+      return { buffer, mimeType: "image/jpeg", provider: "Picsum (last-resort)", sourceUrl: url, genre, staticSlug };
     }
   } catch (innerErr) {
     addLog("queue", `[Phase 2] Picsum last-resort also failed: ${(innerErr as Error).message}`);
@@ -774,25 +776,33 @@ async function generateImageWithFallback(
   baseImg: { buffer: Buffer; mimeType: string; provider: string } | null,
   settings: AppSettings
 ): Promise<string> {
+  // Adjust prompt by matched genre's template before generating
+  const { adjustedPrompt, genre, staticSlug } = applyGenreTemplate(prompt);
+  if (adjustedPrompt !== prompt) {
+    addLog("queue", `[Provider Chain] Genre "${genre}" (${staticSlug}) adjusted prompt: "${adjustedPrompt.slice(0, 100)}"`);
+  } else {
+    addLog("queue", `[Provider Chain] Genre "${genre}" (${staticSlug}) — no template, using original prompt`);
+  }
+
   // Provider chain — add new providers here in priority order
   const geminiKey = settings.geminiApiKey || process.env.GEMINI_API_KEY;
   if (geminiKey) {
-    const result = await generateWithGemini(prompt, baseImg, geminiKey);
+    const result = await generateWithGemini(adjustedPrompt, baseImg, geminiKey);
     if (result) return result.base64Image;
     addLog("queue", `[Provider Chain] Gemini failed, trying next provider...`);
   } else {
     addLog("queue", `[Provider Chain] Gemini skipped — no API key.`);
   }
 
-  const cfResult = await generateWithCloudflareAI(prompt, settings);
+  const cfResult = await generateWithCloudflareAI(adjustedPrompt, settings);
   if (cfResult) return cfResult.base64Image;
   addLog("queue", `[Provider Chain] Cloudflare AI failed or unconfigured, trying next provider...`);
 
-  const pollinationsResult = await generateWithPollinations(prompt);
+  const pollinationsResult = await generateWithPollinations(adjustedPrompt);
   if (pollinationsResult) return pollinationsResult.base64Image;
   addLog("queue", `[Provider Chain] Pollinations.ai failed, trying next provider...`);
 
-  const hfResult = await generateWithHuggingFace(prompt, settings);
+  const hfResult = await generateWithHuggingFace(adjustedPrompt, settings);
   if (hfResult) return hfResult.base64Image;
   addLog("queue", `[Provider Chain] HuggingFace failed, trying next provider...`);
 
@@ -870,10 +880,12 @@ async function generateImageAndSave(prompt: string, category: string, seed: numb
   // 5. Save to Database
   addLog("queue", `[On-Demand] Saving multi-variant images and embedding vector in ArangoDB collection 'Images'...`);
 
+  const { genre, staticSlug: resolvedSlug } = matchGenre(prompt);
   const newDoc: ImageDocument = {
     _key: key,
-    sourceUrl: variants.medium || base64Image, // Default view
-    category: category || "nature",
+    sourceUrl: variants.medium || base64Image,
+    category: category || resolvedSlug,
+    genre,
     text: prompt,
     seed: seed,
     embedding: embedding,
