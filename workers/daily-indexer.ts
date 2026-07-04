@@ -283,10 +283,9 @@ export async function runDailyIndexer(deps: IndexerDeps): Promise<IndexerResult>
       const p = batch[j].provider;
       if (!byProvider[p]) byProvider[p] = { indexed: 0, skipped: 0, errors: 0 };
       const r = results[j];
-      byProvider[p][r]++;
-      if (r === "indexed") totalIndexed++;
-      else if (r === "skipped") totalSkipped++;
-      else totalErrors++;
+      if (r === "indexed") { byProvider[p].indexed++; totalIndexed++; }
+      else if (r === "skipped") { byProvider[p].skipped++; totalSkipped++; }
+      else { byProvider[p].errors++; totalErrors++; }
     }
   }
 
