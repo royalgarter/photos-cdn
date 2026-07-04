@@ -9,7 +9,11 @@
     "dev:node": "node --experimental-strip-types server.ts",
     "start:node": "node --experimental-strip-types server.ts",
     "build": "echo 'No build step required'",
-    "lint": "echo 'No lint required'"
+    "lint": "echo 'No lint required'",
+    "indexer:trigger": "curl -s -X POST http://localhost:34070/api/indexer/trigger | python3 -m json.tool",
+    "indexer:trigger:remote": "curl -s -X POST https://photos-cdn.royalgarter88.deno.net/api/indexer/trigger | python3 -m json.tool",
+    "indexer:status": "curl -s http://localhost:34070/api/indexer/status | python3 -m json.tool",
+    "indexer:status:remote": "curl -s https://photos-cdn.royalgarter88.deno.net/api/indexer/status | python3 -m json.tool"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1079.0",

@@ -57,7 +57,7 @@ async function fetchPexelsCurated(apiKey: string, perPage = 40): Promise<RawPhot
   if (!res.ok) return [];
   const json = await res.json() as any;
   return (json.photos || []).map((p: any) => ({
-    sourceUrl: p.src?.large2x || p.src?.large || p.src?.original,
+    sourceUrl: p.src?.large || p.src?.medium || p.src?.original,
     pageUrl: p.url,
     alt: p.alt || `${p.photographer} pexels photo`,
     category: "nature",
@@ -158,6 +158,8 @@ function inferCategory(alt: string, providerCategory: string): string {
 
 // ── Core indexing logic ───────────────────────────────────────────────────────
 
+const PHOTO_TIMEOUT_MS = 20_000;
+
 async function indexPhoto(
   photo: RawPhoto,
   deps: IndexerDeps,
@@ -166,8 +168,19 @@ async function indexPhoto(
 ): Promise<"indexed" | "skipped" | "error"> {
   if (existingUrls.has(photo.sourceUrl)) return "skipped";
 
+  const timeout = new Promise<"error">((resolve) => setTimeout(() => resolve("error"), PHOTO_TIMEOUT_MS));
+
+  return Promise.race([_indexPhotoCore(photo, deps, settings, existingUrls), timeout]);
+}
+
+async function _indexPhotoCore(
+  photo: RawPhoto,
+  deps: IndexerDeps,
+  settings: any,
+  existingUrls: Set<string>
+): Promise<"indexed" | "skipped" | "error"> {
   try {
-    const imgRes = await fetch(photo.sourceUrl, { signal: AbortSignal.timeout(15000) });
+    const imgRes = await fetch(photo.sourceUrl, { signal: AbortSignal.timeout(12000) });
     if (!imgRes.ok) return "error";
 
     const raw = Buffer.from(await imgRes.arrayBuffer());
@@ -222,8 +235,11 @@ async function indexPhoto(
 
 // ── Main run function ─────────────────────────────────────────────────────────
 
+const RUN_TIMEOUT_MS = 4 * 60 * 1000; // 4-minute hard cap
+
 export async function runDailyIndexer(deps: IndexerDeps): Promise<IndexerResult> {
   const start = Date.now();
+  const deadline = start + RUN_TIMEOUT_MS;
   deps.addLog("system", "[Indexer] Daily scan started");
 
   const settings = await deps.getSettings();
@@ -255,6 +271,10 @@ export async function runDailyIndexer(deps: IndexerDeps): Promise<IndexerResult>
   // Process with concurrency limit (4 at a time to avoid hammering S3/APIs)
   const CONCURRENCY = 4;
   for (let i = 0; i < allPhotos.length; i += CONCURRENCY) {
+    if (Date.now() >= deadline) {
+      deps.addLog("system", `[Indexer] 4-minute deadline reached — stopping at batch ${i}/${allPhotos.length}`);
+      break;
+    }
     const batch = allPhotos.slice(i, i + CONCURRENCY);
     const results = await Promise.all(
       batch.map(photo => indexPhoto(photo, deps, settings, existingUrls))
