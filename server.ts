@@ -5,7 +5,6 @@ import { Jimp } from "jimp";
 import sharp from "sharp";
 import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
 import { StaticPhotosProvider } from "./providers/static-photos.ts";
-import { ClassicSeedsProvider } from "./providers/classic-seeds.ts";
 import { PexelsProvider } from "./providers/pexels.ts";
 import { UnsplashProvider } from "./providers/unsplash.ts";
 import { PicsumProvider } from "./providers/picsum.ts";
@@ -154,89 +153,35 @@ function addLog(type: "api" | "queue" | "system", message: string, details?: any
   writeLog(type, message, details).catch(console.error);
 }
 
-// Generate a vector from text using keyword stems (fallback vectorizer)
-function getSimulatedVector(text: string): number[] {
-  const query = text.toLowerCase();
-  const vector = new Array(128).fill(0.01); // Base background noise for 128 dimensions
-
-  // Keyword associations (mapped to the first 10 dimensions for semantic grouping)
-  const mappings: { idx: number; words: string[] }[] = [
-    { idx: 0, words: ["nature", "forest", "tree", "wood", "mountain", "lake", "river", "grass", "green", "scenery", "valley", "landscape"] },
-    { idx: 1, words: ["water", "river", "ocean", "sea", "wave", "waterfall", "rain", "lake", "stream", "wet", "aqua", "splash"] },
-    { idx: 2, words: ["sky", "cloud", "sun", "star", "galaxy", "cosmic", "sunrise", "sunset", "heaven", "moon", "night sky"] },
-    { idx: 3, words: ["night", "dark", "neon", "shadow", "black", "midnight", "evening", "glowing", "dim"] },
-    { idx: 4, words: ["city", "urban", "building", "street", "concrete", "architecture", "tower", "downtown", "road", "indoor", "museum"] },
-    { idx: 5, words: ["warm", "heat", "desert", "fire", "red", "orange", "gold", "summer", "sun", "hot", "flame", "sunset"] },
-    { idx: 6, words: ["cold", "ice", "snow", "blue", "winter", "frost", "glacier", "chill", "arctic", "freeze"] },
-    { idx: 7, words: ["futuristic", "cyberpunk", "tech", "robot", "neon", "spaceship", "advanced", "hologram", "digital", "machine"] },
-    { idx: 8, words: ["animal", "bird", "fish", "insect", "cat", "dog", "wildlife", "fox", "bear", "tiger", "lion", "nature"] },
-    { idx: 9, words: ["minimal", "abstract", "geometric", "simple", "clean", "pattern", "line", "shape", "white", "minimalist"] }
-  ];
-
-  mappings.forEach(({ idx, words }) => {
-    words.forEach(word => {
-      if (query.includes(word)) {
-        vector[idx] += 0.35;
-      }
-    });
-  });
-
-  // Use a simple deterministic string hashing to fill the rest of the 128 elements so that different texts get slightly different, reproducible vectors
-  for (let i = 10; i < 128; i++) {
-    let hash = 0;
-    for (let j = 0; j < text.length; j++) {
-      hash = (hash * 31 + text.charCodeAt(j) + i) % 1000;
-    }
-    vector[i] = 0.01 + (hash / 1000) * 0.05;
-  }
-
-  // Normalize vector to unit length (for cosine similarity)
-  const magnitude = Math.sqrt(vector.reduce((sum, val) => sum + val * val, 0));
-  return vector.map(val => Number((val / magnitude).toFixed(4)));
-}
-
-// Perform real Gemini vector embedding using gemini-embedding-2 (128 dims)
+// Gemini vector embedding — gemini-embedding-2, 128 dims. No fallback.
 async function getEmbeddingVector(text: string): Promise<number[]> {
   const cached = getCachedEmbedding(text);
   if (cached) return cached;
 
   const settings = await getSettings();
   const geminiKey = settings.geminiApiKey || process.env.GEMINI_API_KEY;
-  if (!geminiKey || geminiKey === "MY_GEMINI_API_KEY") {
-    const vec = getSimulatedVector(text);
-    setCachedEmbedding(text, vec);
-    return vec;
+  if (!geminiKey) throw new Error("GEMINI_API_KEY not configured — required for embeddings");
+
+  const ai = new GoogleGenAI({ apiKey: geminiKey });
+  addLog("system", `[Gemini] Embedding: "${text.slice(0, 80)}"`);
+  const response = await ai.models.embedContent({
+    model: "gemini-embedding-2",
+    contents: { parts: [{ text }] },
+    config: { outputDimensionality: 128 }
+  });
+
+  const values: number[] | undefined =
+    response.embedding?.values ??
+    (response as any).embeddings?.[0]?.values;
+
+  if (!Array.isArray(values) || values.length === 0) {
+    throw new Error(`Gemini returned empty embedding for: "${text.slice(0, 80)}"`);
   }
 
-  try {
-    const ai = new GoogleGenAI({ apiKey: geminiKey });
-    addLog("system", `[Gemini API] Requesting 128-dimensional vector embedding for: "${text}"`);
-    const response = await ai.models.embedContent({
-      model: "gemini-embedding-2",
-      contents: { parts: [{ text }] },
-      config: {
-        outputDimensionality: 128
-      }
-    });
-
-    const values: number[] | undefined =
-      response.embedding?.values ??
-      (response as any).embeddings?.[0]?.values;
-
-    if (Array.isArray(values) && values.length > 0) {
-      const magnitude = Math.sqrt(values.reduce((sum: number, val: number) => sum + val * val, 0));
-      const vec = values.map((val: number) => Number((val / magnitude).toFixed(4)));
-      setCachedEmbedding(text, vec);
-      return vec;
-    }
-    addLog("system", `[Gemini Debug] response keys: ${Object.keys(response).join(", ")}`);
-    throw new Error(`Invalid or empty embedding values returned from Gemini model (got ${JSON.stringify(values)?.slice(0, 100)})`);
-  } catch (error) {
-    addLog("system", `[Gemini Error] Embedding failed: ${(error as Error).message}. Falling back to 128-dimensional keyword simulation.`);
-    const vec = getSimulatedVector(text);
-    setCachedEmbedding(text, vec);
-    return vec;
-  }
+  const magnitude = Math.sqrt(values.reduce((sum: number, val: number) => sum + val * val, 0));
+  const vec = values.map((val: number) => Number((val / magnitude).toFixed(4)));
+  setCachedEmbedding(text, vec);
+  return vec;
 }
 
 // Cosine similarity between two vectors
@@ -249,65 +194,6 @@ function cosineSimilarity(vecA: number[], vecB: number[]): number {
   return Number((dotProduct / (magA * magB)).toFixed(4));
 }
 
-// Default highly illustrative items to seed the collections
-const SEED_DATA: ImageDocument[] = [
-  {
-    _key: "emerald-cascade",
-    sourceUrl: "https://images.unsplash.com/photo-1506744038136-46273834b3fb",
-    category: "nature",
-    text: "A crystal clear waterfall cascading through an ancient emerald forest",
-    seed: 101,
-    embedding: [0.9, 0.8, 0.1, 0.1, 0.0, 0.1, 0.3, 0.0, 0.2, 0.1] // Nature, Water, Organic
-  },
-  {
-    _key: "neon-cyberpunk",
-    sourceUrl: "https://images.unsplash.com/photo-1515621061946-eff1c2a352bd",
-    category: "urban",
-    text: "A rain-slicked cyberpunk street at night filled with glowing neon signs and holograms",
-    seed: 102,
-    embedding: [0.1, 0.3, 0.1, 0.9, 0.9, 0.4, 0.1, 0.9, 0.0, 0.2] // Dark, Urban, Futurist, Wet
-  },
-  {
-    _key: "sahara-sunset",
-    sourceUrl: "https://images.unsplash.com/photo-1509316975850-ff9c5deb0cd9",
-    category: "nature",
-    text: "A deep red and orange sunset over majestic sand dunes in the Sahara desert",
-    seed: 103,
-    embedding: [0.7, 0.0, 0.8, 0.1, 0.0, 1.0, 0.0, 0.0, 0.1, 0.3] // Nature, Sky, Warm, Desert
-  },
-  {
-    _key: "milky-way",
-    sourceUrl: "https://images.unsplash.com/photo-1506318137071-a8e063b4bec0",
-    category: "space",
-    text: "The cosmic Milky Way galaxy stretching across a crystal clear starry night sky",
-    seed: 104,
-    embedding: [0.2, 0.0, 1.0, 1.0, 0.0, 0.1, 0.4, 0.2, 0.0, 0.4] // Sky, Cosmic, Night, Starry
-  },
-  {
-    _key: "concrete-minimalist",
-    sourceUrl: "https://images.unsplash.com/photo-1600585154340-be6161a56a0c",
-    category: "architecture",
-    text: "A modernist concrete museum facade with sharp geometric shadows and clean lines",
-    seed: 105,
-    embedding: [0.0, 0.0, 0.2, 0.3, 1.0, 0.2, 0.1, 0.2, 0.0, 0.9] // Urban, Minimalism, Abstract
-  },
-  {
-    _key: "alpine-lake",
-    sourceUrl: "https://images.unsplash.com/photo-1464822759023-fed622ff2c3b",
-    category: "nature",
-    text: "A towering snow-capped mountain peak reflecting in a perfectly calm alpine lake at sunrise",
-    seed: 106,
-    embedding: [0.9, 0.8, 0.7, 0.1, 0.0, 0.3, 0.8, 0.0, 0.1, 0.2] // Nature, Mountain, Snow, Sunrise, Lake
-  },
-  {
-    _key: "arctic-fox",
-    sourceUrl: "https://images.unsplash.com/photo-1504198453319-5ce911bafcde",
-    category: "animals",
-    text: "A fluffy white arctic fox curled up in the pristine winter snow",
-    seed: 107,
-    embedding: [0.7, 0.3, 0.2, 0.1, 0.0, 0.0, 0.9, 0.0, 1.0, 0.3] // Nature, Winter, Animal, Snow
-  }
-];
 
 // ==========================================
 // 2. ARANGODB ACCESSORS & SERVICES LAYER
@@ -378,25 +264,9 @@ async function connectToArango() {
       addLog("system", "ArangoDB 'Settings' configuration loaded successfully.");
     }
 
-    // Load or seed images collection
-    const imagesColl = arangoDb.collection("Images");
     const countResult = await arangoDb.query(`RETURN LENGTH(Images)`);
     const count = await countResult.next();
-    if (count === 0) {
-      addLog("system", "ArangoDB 'Images' collection is empty. Seeding defaults with 128-dimensional embeddings...");
-      const normalizedSeed: ImageDocument[] = [];
-      for (const img of SEED_DATA) {
-        const emb = await getEmbeddingVector(img.text);
-        normalizedSeed.push({
-          ...img,
-          embedding: emb
-        });
-      }
-      for (const img of normalizedSeed) {
-        await imagesColl.save(img);
-      }
-      addLog("system", "ArangoDB 'Images' collection successfully populated with 128-dimensional seed data.");
-    }
+    addLog("system", `ArangoDB 'Images' collection has ${count} documents.`);
 
   } catch (err) {
     addLog("system", `ArangoDB Connection Failed: ${(err as Error).message}`);
@@ -521,25 +391,11 @@ async function findClosestImage(queryVec: number[], allImages: ImageDocument[]):
 async function resetDB(): Promise<void> {
   if (!arangoDb) throw new Error("ArangoDB is not initialized");
   invalidateImagesCache();
-  addLog("system", "ArangoDB: Clearing Images collection...");
+  addLog("system", "ArangoDB: Clearing Images, Logs and Queue collections...");
   await arangoDb.query(`FOR img IN Images REMOVE img IN Images`);
-  const imagesColl = arangoDb.collection("Images");
-  const normalizedSeed: ImageDocument[] = [];
-  for (const img of SEED_DATA) {
-    const emb = await getEmbeddingVector(img.text);
-    normalizedSeed.push({
-      ...img,
-      embedding: emb
-    });
-  }
-  for (const img of normalizedSeed) {
-    await imagesColl.save(img);
-  }
-  
-  addLog("system", "ArangoDB: Clearing Logs and Job Queue collections...");
   await arangoDb.query(`FOR log IN Logs REMOVE log IN Logs`);
   await arangoDb.query(`FOR job IN Queue REMOVE job IN Queue`);
-  addLog("system", "ArangoDB: Reseed and cleanup completed.");
+  addLog("system", "ArangoDB: Reset completed.");
 }
 
 // Queue Accessors
@@ -692,8 +548,6 @@ const FALLBACK_CHAIN: FallbackProvider[] = [
   new StaticPhotosProvider(),
   // Keyless deterministic fallbacks
   new PicsumProvider(),
-  // Classic hardcoded seeds as last resort
-  new ClassicSeedsProvider(getSimulatedVector, cosineSimilarity),
 ];
 
 async function fetchBaseImage(prompt: string, promptVector: number[]): Promise<{ buffer: Buffer; mimeType: string; provider: string; sourceUrl: string } | null> {
@@ -1242,7 +1096,7 @@ app.get("/api/cdn/:width/:height", async (req, res) => {
       }
     }
 
-    let finalImage = matchedImage || currentImages[0] || SEED_DATA[0];
+    let finalImage = matchedImage || currentImages[0];
     let cacheControl = "public, max-age=31536000";
     let triggerGeneration = false;
     const provider = finalImage._key ? "DB" : "Seed";
@@ -1286,11 +1140,10 @@ app.get("/api/cdn/:width/:height", async (req, res) => {
     if (isFallback) setFallbackHeaders(res, provider, similarityScore, timedOut);
 
     if (format === "blurhash") {
-      addLog("api", `[Phase 4] Format requested: blurhash. Running native Wasm/TS Blurhash encoder...`);
-      const simulatedBlurhash = "L6PZfHeD.AyD_N%g9GMy?v%0IAxG";
+      addLog("api", `[Phase 4] Format requested: blurhash.`);
       res.setHeader("Content-Type", "application/json");
       return res.status(200).json({
-        blurhash: simulatedBlurhash,
+        blurhash: null,
         sourceUrl: finalImage.sourceUrl,
         similarity: similarityScore,
         metadata: { key: finalImage._key, prompt: finalImage.text, seed: finalImage.seed }
