@@ -4,6 +4,9 @@ import { Database } from "arangojs";
 import { Jimp } from "jimp";
 import sharp from "sharp";
 import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
+import { StaticPhotosProvider } from "./providers/static-photos.ts";
+import { ClassicSeedsProvider } from "./providers/classic-seeds.ts";
+import type { FallbackProvider } from "./providers/types.ts";
 
 const app = express();
 const PORT = parseInt(process.env.PORT || "3000");
@@ -653,137 +656,37 @@ async function uploadToS3(
   }
 }
 
-interface FallbackProviderItem {
-  provider: string;
-  category: string;
-  url: string;
-  text: string;
-  embedding?: number[];
-}
-
-const FALLBACK_PROVIDERS: FallbackProviderItem[] = [
-  {
-    provider: "Unsplash",
-    category: "nature",
-    url: "https://images.unsplash.com/photo-1506744038136-46273834b3fb",
-    text: "emerald cascade green forest waterfall trees water organic stream nature"
-  },
-  {
-    provider: "Unsplash",
-    category: "urban",
-    url: "https://images.unsplash.com/photo-1515621061946-eff1c2a352bd",
-    text: "cyberpunk city street rain night neon lights glowing skyscrapers urban"
-  },
-  {
-    provider: "Unsplash",
-    category: "space",
-    url: "https://images.unsplash.com/photo-1506318137071-a8e063b4bec0",
-    text: "milky way galaxy cosmic starry night sky stars universe outer space celestial"
-  },
-  {
-    provider: "Unsplash",
-    category: "architecture",
-    url: "https://images.unsplash.com/photo-1600585154340-be6161a56a0c",
-    text: "modernist concrete architecture building facade sharp lines geometric museum minimalist"
-  },
-  {
-    provider: "Unsplash",
-    category: "animals",
-    url: "https://images.unsplash.com/photo-1504198453319-5ce911bafcde",
-    text: "arctic fox animal winter snow cold white fluffy puppy wildlife fauna"
-  },
-  {
-    provider: "Pexels",
-    category: "nature",
-    url: "https://images.pexels.com/photos/3408744/pexels-photo-3408744.jpeg",
-    text: "autumn forest gold red leaves trees woods scenic nature foliage path wilderness"
-  },
-  {
-    provider: "Pexels",
-    category: "urban",
-    url: "https://images.pexels.com/photos/169647/pexels-photo-169647.jpeg",
-    text: "downtown skyscrapers traffic trails speed city life cityscape architecture road street"
-  },
-  {
-    provider: "Flickr",
-    category: "nature",
-    url: "https://live.staticflickr.com/65535/51299834246_7f16751280_b.jpg",
-    text: "majestic mountain peaks snow lake reflection calm peaceful sunrise hills scenic landscape"
-  },
-  {
-    provider: "Flickr",
-    category: "animals",
-    url: "https://live.staticflickr.com/65535/50849301987_a1459a930b_b.jpg",
-    text: "bald eagle bird prey flying wings feathers wild majestic predator sky"
-  },
-  {
-    provider: "StaticPhotos",
-    category: "minimalism",
-    url: "https://images.unsplash.com/photo-1494438639946-1ebd1d2038b5",
-    text: "cozy minimalist room lamp warm light simple table chair abstract comfort"
-  },
-  {
-    provider: "Picsum",
-    category: "nature",
-    url: "https://picsum.photos/id/10/1024/1024",
-    text: "lake mountain shore forest trees green waters sky nature landscape"
-  },
-  {
-    provider: "Picsum",
-    category: "urban",
-    url: "https://picsum.photos/id/1031/1024/1024",
-    text: "city street buildings architecture car traffic road urban people"
-  }
+const FALLBACK_CHAIN: FallbackProvider[] = [
+  new StaticPhotosProvider(),
+  new ClassicSeedsProvider(getSimulatedVector, cosineSimilarity),
 ];
 
-async function getBestFitFallback(promptVector: number[]): Promise<FallbackProviderItem> {
-  let bestFit = FALLBACK_PROVIDERS[0];
-  let maxSim = -1;
-  
-  for (const item of FALLBACK_PROVIDERS) {
-    if (!item.embedding || item.embedding.length !== 128) {
-      item.embedding = getSimulatedVector(item.text);
-    }
-    const sim = cosineSimilarity(promptVector, item.embedding);
-    if (sim > maxSim) {
-      maxSim = sim;
-      bestFit = item;
-    }
-  }
-  
-  return bestFit;
-}
-
 async function fetchBaseImage(prompt: string, promptVector: number[]): Promise<{ buffer: Buffer; mimeType: string; provider: string; sourceUrl: string } | null> {
-  try {
-    const bestFit = await getBestFitFallback(promptVector);
-    addLog("queue", `[Phase 2] Free Source Image API: Best fit fallback selected from ${bestFit.provider} (Category: ${bestFit.category}, Text: "${bestFit.text}")`);
-    
-    addLog("queue", `[Phase 2] Free Source Image API: Fetching base image from: ${bestFit.url}`);
-    const response = await fetch(bestFit.url);
-    if (!response.ok) {
-      throw new Error(`Failed to fetch from ${bestFit.provider}: ${response.statusText}`);
-    }
-    const arrayBuffer = await response.arrayBuffer();
-    const buffer = Buffer.from(arrayBuffer);
-    const mimeType = response.headers.get("Content-Type") || "image/jpeg";
-    addLog("queue", `[Phase 2] Free Source Image API: Successfully retrieved base image (${buffer.length} bytes, type: ${mimeType})`);
-    return { buffer, mimeType, provider: bestFit.provider, sourceUrl: bestFit.url };
-  } catch (err) {
-    addLog("queue", `[Phase 2] Free Source Image API Error: ${(err as Error).message}. Falling back to Picsum Photos default seed.`);
+  for (const provider of FALLBACK_CHAIN) {
     try {
-      const url = `https://picsum.photos/seed/${encodeURIComponent(prompt.substring(0, 30))}/1024/1024`;
-      const response = await fetch(url);
-      if (response.ok) {
-        const arrayBuffer = await response.arrayBuffer();
-        const buffer = Buffer.from(arrayBuffer);
-        return { buffer, mimeType: "image/jpeg", provider: "Picsum (Fallback)", sourceUrl: url };
+      const result = await provider.fetch(prompt, promptVector);
+      if (result) {
+        addLog("queue", `[Phase 2] Fallback provider "${provider.name}" succeeded (${result.buffer.length} bytes)`);
+        return result;
       }
-    } catch (innerErr) {
-      addLog("queue", `[Phase 2] Picsum backup also failed: ${(innerErr as Error).message}`);
+      addLog("queue", `[Phase 2] Fallback provider "${provider.name}" returned null, trying next`);
+    } catch (err) {
+      addLog("queue", `[Phase 2] Fallback provider "${provider.name}" threw: ${(err as Error).message}, trying next`);
     }
-    return null;
   }
+  // Last-resort: Picsum by prompt seed
+  try {
+    const url = `https://picsum.photos/seed/${encodeURIComponent(prompt.substring(0, 30))}/1024/1024`;
+    const response = await fetch(url);
+    if (response.ok) {
+      const arrayBuffer = await response.arrayBuffer();
+      const buffer = Buffer.from(arrayBuffer);
+      return { buffer, mimeType: "image/jpeg", provider: "Picsum (last-resort)", sourceUrl: url };
+    }
+  } catch (innerErr) {
+    addLog("queue", `[Phase 2] Picsum last-resort also failed: ${(innerErr as Error).message}`);
+  }
+  return null;
 }
 
 // ==========================================
