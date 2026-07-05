@@ -5,7 +5,6 @@
  */
 
 import { Buffer } from "node:buffer";
-import { Jimp } from "jimp";
 import sharp from "sharp";
 import { matchGenre } from "../providers/static-photos.ts";
 import { fetchOpenversePhotos } from "../providers/openverse.ts";
@@ -170,13 +169,14 @@ async function _indexPhotoCore(
 		const text = `${photo.alt} ${category} ${photo.provider}`.toLowerCase();
 		const embedding = await deps.getEmbeddingVector(text);
 
-		const jimpImg = await Jimp.read(raw);
 		const key = `idx-${photo.provider.toLowerCase()}-${Math.random().toString(36).substring(2, 9)}`;
 		const variants: Record<string, string> = {};
 
 		for (const [resName, dim] of Object.entries(deps.RESOLUTIONS)) {
-			const cloned = jimpImg.clone().cover({ w: dim.w, h: dim.h });
-			const rawBuf = await cloned.getBuffer("image/jpeg", { quality: 85 });
+			const rawBuf = await sharp(raw)
+				.resize(dim.w, dim.h, { fit: "cover" })
+				.jpeg({ quality: 85 })
+				.toBuffer();
 			const jpgBuffer = await deps.compressImage(rawBuf, "image/jpeg");
 			const [webpBuffer, pngBuffer] = await Promise.all([
 				deps.convertBuffer(jpgBuffer, "webp"),
@@ -267,8 +267,8 @@ export async function runDailyIndexer(deps: IndexerDeps): Promise<IndexerResult>
 	const byProvider: Record<string, { indexed: number; skipped: number; errors: number }> = {};
 	let totalIndexed = 0, totalSkipped = 0, totalErrors = 0;
 
-	// Process with concurrency limit (4 at a time to avoid hammering S3/APIs)
-	const CONCURRENCY = 4;
+	// Sequential processing to stay within 512MB RAM limit — image buffers are large
+	const CONCURRENCY = 1;
 	for (let i = 0; i < allPhotos.length; i += CONCURRENCY) {
 		const batch = allPhotos.slice(i, i + CONCURRENCY);
 		const batchNum = Math.floor(i / CONCURRENCY) + 1;

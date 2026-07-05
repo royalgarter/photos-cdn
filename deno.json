@@ -1,6 +1,6 @@
 {
   "tasks": {
-    "start": "deno run --allow-all --unstable-cron --env=.env server.ts"
+    "start": "deno run --allow-all --unstable-cron --env=.env --v8-flags=--max-old-space-size=512 server.ts"
   },
   "nodeModulesDir": "auto"
 }
