@@ -2,8 +2,11 @@ import express from "express";
 import { createHash } from "node:crypto";
 import { GoogleGenAI } from "@google/genai";
 import { Database } from "arangojs";
-import { Jimp } from "jimp";
 import sharp from "sharp";
+
+// Limit sharp/libvips worker threads and cache to reduce native memory footprint
+sharp.concurrency(1);
+sharp.cache({ memory: 50, files: 20, items: 200 });
 import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
 import { StaticPhotosProvider, matchGenre, applyGenreTemplate } from "./providers/static-photos.ts";
 import { PexelsProvider } from "./providers/pexels.ts";
@@ -913,21 +916,23 @@ async function generateImageAndSave(prompt: string, category: string, seed: numb
 	const settings = await getSettings();
 	const base64Image = await generateImageWithFallback(prompt, baseImg, settings);
 
-	// 4. Jimp Multi-Variant Resizing
-	addLog("queue", `[On-Demand] Jimp: Reading generated image buffer into memory...`);
-	const jimpImg = await Jimp.read(Buffer.from(base64Image.replace(/^data:image\/\w+;base64,/, ""), "base64"));
+	// 4. Multi-Variant Resizing via sharp
+	addLog("queue", `[On-Demand] sharp: Reading generated image buffer...`);
+	const srcBuffer = Buffer.from(base64Image.replace(/^data:image\/\w+;base64,/, ""), "base64");
+	const meta = await sharp(srcBuffer).metadata();
 
 	const key = `gen-${Math.random().toString(36).substring(2, 9)}`;
 	const variants: Record<string, string> = {};
 
-	addLog("queue", `[On-Demand] Jimp: Resizing and preparing multi-variant resolutions (Desktop, Mobile, Tablet)...`);
-	addLog("queue", `[On-Demand] Jimp: Source size ${jimpImg.width}x${jimpImg.height}. Applying cover-fill transform to all ${Object.keys(RESOLUTIONS).length} presets...`);
+	addLog("queue", `[On-Demand] sharp: Source size ${meta.width}x${meta.height}. Resizing ${Object.keys(RESOLUTIONS).length} presets...`);
 
 	for (const [resName, dim] of Object.entries(RESOLUTIONS)) {
-		addLog("queue", `[On-Demand] Jimp: Resizing variant '${resName}' to ${dim.w}x${dim.h}...`);
-		const cloned = jimpImg.clone().cover({ w: dim.w, h: dim.h });
-		const rawBuffer = await cloned.getBuffer("image/jpeg", { quality: 85 });
-		const base64Str = await cloned.getBase64("image/jpeg");
+		addLog("queue", `[On-Demand] sharp: Resizing variant '${resName}' to ${dim.w}x${dim.h}...`);
+		const rawBuffer = await sharp(srcBuffer)
+			.resize(dim.w, dim.h, { fit: "cover" })
+			.jpeg({ quality: 85 })
+			.toBuffer();
+		const base64Str = `data:image/jpeg;base64,${rawBuffer.toString("base64")}`;
 
 		// Compress jpg before upload
 		const jpgBuffer = await compressImage(rawBuffer, "image/jpeg");
