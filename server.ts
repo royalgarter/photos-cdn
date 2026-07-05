@@ -1,4 +1,5 @@
 import express from "express";
+import { createHash } from "node:crypto";
 import { GoogleGenAI } from "@google/genai";
 import { Database } from "arangojs";
 import { Jimp } from "jimp";
@@ -19,6 +20,55 @@ const app = express();
 const PORT = parseInt(process.env.PORT || "34070");
 
 app.use(express.json());
+
+// ==========================================
+// ADMIN AUTH
+// ==========================================
+
+const ADMIN_KEY = process.env.ADMIN_KEY || "";
+const ADMIN_TOKEN = ADMIN_KEY
+  ? createHash("sha256").update(ADMIN_KEY + "photos-cdn-admin").digest("hex")
+  : "";
+
+function parseCookies(req: express.Request): Record<string, string> {
+  const list: Record<string, string> = {};
+  const header = req.headers.cookie;
+  if (!header) return list;
+  for (const part of header.split(";")) {
+    const [name, ...rest] = part.split("=");
+    if (name) list[name.trim()] = decodeURIComponent(rest.join("=").trim());
+  }
+  return list;
+}
+
+function requireAdmin(req: express.Request, res: express.Response, next: express.NextFunction) {
+  if (!ADMIN_KEY) return next(); // no ADMIN_KEY set = open (dev mode)
+  const cookies = parseCookies(req);
+  if (cookies.admin_token === ADMIN_TOKEN) return next();
+  return res.status(401).json({ error: "Unauthorized. Visit /?key=ADMIN_KEY to authenticate." });
+}
+
+// Handle ?key= on any request — set session cookie then redirect without the key param
+app.use((req: express.Request, res: express.Response, next: express.NextFunction) => {
+  const key = req.query.key as string | undefined;
+  if (key && ADMIN_KEY && key === ADMIN_KEY) {
+    res.setHeader("Set-Cookie", `admin_token=${ADMIN_TOKEN}; Path=/; HttpOnly; SameSite=Strict`);
+    const qs = new URLSearchParams();
+    for (const [k, v] of Object.entries(req.query)) {
+      if (k !== "key" && typeof v === "string") qs.set(k, v);
+    }
+    const redirect = req.path + (qs.toString() ? "?" + qs.toString() : "");
+    return res.redirect(302, redirect);
+  }
+  next();
+});
+
+app.get("/api/auth/check", (req: express.Request, res: express.Response) => {
+  if (!ADMIN_KEY) return res.json({ authenticated: true });
+  const cookies = parseCookies(req);
+  if (cookies.admin_token === ADMIN_TOKEN) return res.json({ authenticated: true });
+  return res.status(401).json({ authenticated: false });
+});
 
 // ==========================================
 // 1. SCHEMAS & INTERFACES
@@ -1004,19 +1054,19 @@ async function enqueueJob(prompt: string, category: string, seed: number) {
 // ==========================================
 
 // Settings endpoints
-app.get("/api/settings", async (req, res) => {
+app.get("/api/settings", requireAdmin, async (req, res) => {
   const settings = await getSettings();
   res.json(settings);
 });
 
-app.post("/api/settings", async (req, res) => {
+app.post("/api/settings", requireAdmin, async (req, res) => {
   const newSettings: AppSettings = req.body;
   await updateSettings(newSettings);
   res.json({ success: true, settings: newSettings });
 });
 
 // Reset DB
-app.post("/api/reset", async (req, res) => {
+app.post("/api/reset", requireAdmin, async (req, res) => {
   await resetDB();
   res.json({ success: true, message: "Database reseeded!" });
 });
@@ -1026,13 +1076,13 @@ app.get("/api/genres", (_req, res) => {
   res.json(GENRES.map(g => ({ slug: g.slug, staticSlug: g.staticSlug, keywords: g.keywords.slice(0, 5) })));
 });
 
-app.get("/api/images", async (req, res) => {
+app.get("/api/images", requireAdmin, async (req, res) => {
   const images = await getImages();
   res.json(images);
 });
 
 // Migrate existing variant URLs from raw R2 endpoint to cdnDomain
-app.post("/api/images/migrate-cdn-urls", async (_req, res) => {
+app.post("/api/images/migrate-cdn-urls", requireAdmin, async (_req, res) => {
   if (!arangoDb) return res.status(503).json({ error: "DB not connected" });
   const settings = await getSettings();
   if (!settings.cdnDomain) return res.status(400).json({ error: "cdnDomain not set in settings" });
@@ -1067,13 +1117,13 @@ app.post("/api/images/migrate-cdn-urls", async (_req, res) => {
 });
 
 // Get Queue Jobs
-app.get("/api/queue", async (req, res) => {
+app.get("/api/queue", requireAdmin, async (req, res) => {
   const queue = await getQueue();
   res.json(queue);
 });
 
 // Get Live Logs
-app.get("/api/logs", async (req, res) => {
+app.get("/api/logs", requireAdmin, async (req, res) => {
   const logs = await getLogs();
   res.json(logs);
 });
@@ -1492,11 +1542,11 @@ function getIndexerDeps() {
   };
 }
 
-app.get("/api/indexer/status", (_req, res) => {
+app.get("/api/indexer/status", requireAdmin, (_req, res) => {
   res.json(indexerStatus || { running: false, lastRun: null, lastResult: null, nextRun: null });
 });
 
-app.post("/api/indexer/trigger", async (_req, res) => {
+app.post("/api/indexer/trigger", requireAdmin, async (_req, res) => {
   if (indexerStatus?.running) {
     return res.status(409).json({ error: "Indexer already running" });
   }
