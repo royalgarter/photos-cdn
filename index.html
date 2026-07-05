@@ -1,1364 +1,1362 @@
 <!doctype html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Lorem Ipsum Photos API Playground</title>
-    
-    <!-- Google Fonts -->
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <!-- Tailwind Play CDN -->
-    <link rel="stylesheet" href="https://cdn.html-first.com/litewind-2.0.1.css" />
-    <!-- Lucide Icons CDN -->
-    <script src="https://unpkg.com/lucide@latest"></script>
-    <!-- AlpineJS CDN -->
-    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
-  </head>
-  <body class="bg-gray-50 text-gray-900 font-sans antialiased">
-    <div id="root" x-data="appState" class="min-h-screen bg-gray-50 flex flex-col">
-      
-      <!-- 1. APP HEADER -->
-      <header class="border-b border-gray-300 bg-white sticky top-0 z-50 px-6 py-4">
-        <div class="max-w-7xl mx-auto flex flex-col md:flex-row md:items-center justify-between gap-4">
-          <div class="flex items-center gap-3">
-            <div class="h-10 w-10 border border-gray-900 bg-white flex items-center justify-center">
-              <i data-lucide="zap" class="h-5 w-5 text-gray-900"></i>
-            </div>
-            <div>
-              <div class="flex items-center gap-2">
-                <h1 id="app-title" class="text-lg font-bold tracking-tight text-gray-900">
-                  Lorem Ipsum Photos
-                </h1>
-              </div>
-              <p class="text-xs text-gray-500">Zero-SDK Edge Optimized Dynamic Image CDN</p>
-            </div>
-          </div>
-
-          <!-- Nav Tabs -->
-          <div class="flex items-center bg-gray-50 p-1 border border-gray-300 gap-1">
-            <button
-              @click="activeTab = 'sandbox'"
-              class="flex items-center gap-2 px-4 py-2 text-xs font-medium transition-colors"
-              :class="activeTab === 'sandbox' ? 'bg-blue-600 text-white border border-blue-600 font-bold' : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'"
-            >
-              <i data-lucide="cpu" class="h-3.5 w-3.5"></i>
-              API Sandbox
-            </button>
-            <button
-              @click="activeTab = 'database'"
-              class="flex items-center gap-2 px-4 py-2 text-xs font-medium transition-colors"
-              :class="activeTab === 'database' ? 'bg-blue-600 text-white border border-blue-600 font-bold' : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'"
-            >
-              <i data-lucide="database" class="h-3.5 w-3.5"></i>
-              ArangoDB Vector
-              <i x-show="!isAdmin" data-lucide="lock" class="h-3 w-3 text-gray-400"></i>
-            </button>
-            <button
-              @click="activeTab = 'queue'"
-              class="flex items-center gap-2 px-4 py-2 text-xs font-medium transition-colors relative"
-              :class="activeTab === 'queue' ? 'bg-blue-600 text-white border border-blue-600 font-bold' : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'"
-            >
-              <i data-lucide="layers" class="h-3.5 w-3.5"></i>
-              ArangoDB Queue
-              <i x-show="!isAdmin" data-lucide="lock" class="h-3 w-3 text-gray-400"></i>
-              <span x-show="isAdmin && activeQueueCount > 0" class="absolute top-1 right-1 h-1.5 w-1.5 bg-yellow-500"></span>
-            </button>
-            <button
-              @click="activeTab = 'srcset'"
-              class="flex items-center gap-2 px-4 py-2 text-xs font-medium transition-colors"
-              :class="activeTab === 'srcset' ? 'bg-purple-600 text-white border border-purple-600 font-bold' : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'"
-            >
-              <i data-lucide="layout" class="h-3.5 w-3.5"></i>
-              srcset / Async
-            </button>
-            <button
-              @click="activeTab = 'settings'"
-              class="flex items-center gap-2 px-4 py-2 text-xs font-medium transition-colors"
-              :class="activeTab === 'settings' ? 'bg-blue-600 text-white border border-blue-600 font-bold' : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'"
-            >
-              <i data-lucide="settings" class="h-3.5 w-3.5"></i>
-              System Settings
-              <i x-show="!isAdmin" data-lucide="lock" class="h-3 w-3 text-gray-400"></i>
-            </button>
-            <a
-              href="/about.html"
-              class="flex items-center gap-2 px-4 py-2 text-xs font-medium transition-colors text-gray-600 hover:text-gray-900 hover:bg-gray-100 no-underline"
-            >
-              <i data-lucide="info" class="h-3.5 w-3.5"></i>
-              About
-            </a>
-          </div>
-        </div>
-      </header>
-
-      <!-- MAIN CONTAINER -->
-      <main class="max-w-7xl mx-auto px-6 py-8 space-y-6 flex-1 w-full">
-        
-        <!-- TOP METRICS ROW -->
-        <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
-          <div class="bg-white border border-gray-300 p-4 flex items-center justify-between hover:border-blue-500 transition-colors">
-            <div class="space-y-1">
-              <span class="text-xs text-gray-500 font-mono tracking-wider uppercase block">ArangoDB Collections</span>
-              <span class="text-lg font-bold font-mono text-gray-900" x-text="images.length + ' docs'"></span>
-            </div>
-            <div class="h-10 w-10 border border-gray-300 flex items-center justify-center text-gray-600">
-              <i data-lucide="database" class="h-4 w-4"></i>
-            </div>
-          </div>
-
-          <div class="bg-white border border-gray-300 p-4 flex items-center justify-between hover:border-blue-500 transition-colors">
-            <div class="space-y-1">
-              <span class="text-xs text-gray-500 font-mono tracking-wider uppercase block">R2 Objects Cached</span>
-              <span class="text-lg font-bold font-mono text-gray-900" x-text="images.length + ' files'"></span>
-            </div>
-            <div class="h-10 w-10 border border-gray-300 flex items-center justify-center text-gray-600">
-              <i data-lucide="image" class="h-4 w-4"></i>
-            </div>
-          </div>
-
-          <div class="bg-white border border-gray-300 p-4 flex items-center justify-between hover:border-blue-500 transition-colors">
-            <div class="space-y-1">
-              <span class="text-xs text-gray-500 font-mono tracking-wider uppercase block">ArangoDB Queue</span>
-              <span class="text-lg font-bold font-mono text-gray-900" x-text="activeQueueCount + ' jobs'"></span>
-            </div>
-            <div class="h-10 w-10 border border-gray-300 flex items-center justify-center text-gray-600">
-              <i data-lucide="layers" class="h-4 w-4"></i>
-            </div>
-          </div>
-
-          <div class="bg-white border border-gray-300 p-4 flex items-center justify-between hover:border-blue-500 transition-colors">
-            <div class="space-y-1">
-              <span class="text-xs text-gray-500 font-mono tracking-wider uppercase block">Latest Match</span>
-              <span class="text-lg font-bold font-mono text-gray-900" x-text="testResult ? (testResult.similarity * 100).toFixed(1) + '%' : '—'"></span>
-            </div>
-            <div class="h-10 w-10 border border-gray-300 flex items-center justify-center text-gray-600">
-              <i data-lucide="zap" class="h-4 w-4"></i>
-            </div>
-          </div>
-        </div>
-
-        <!-- 1.b. Visual Step-by-Step Pipeline Tracker -->
-        <div class="bg-white border border-gray-300 p-6">
-          <h3 class="text-xs font-bold text-gray-900 mb-6 flex items-center gap-2">
-            <i data-lucide="layers" class="h-4 w-4 text-blue-500"></i>
-            Request Execution Flow (Step-by-Step Lifecycle)
-          </h3>
-
-          <div class="grid grid-cols-2 md:grid-cols-4 gap-4 relative">
-            <!-- Flow Line -->
-            <div class="hidden md:block absolute top-6 left-12 right-12 h-0.5 bg-gray-200 z-0"></div>
-
-            <!-- Step 1 -->
-            <div
-              class="p-4 border transition-colors z-10 flex flex-col items-center text-center relative"
-              :class="activeStep === 1 ? 'bg-white border-blue-500 text-blue-600 font-bold' : 'bg-white border-gray-200 text-gray-500'"
-            >
-              <div class="h-9 w-9 border flex items-center justify-center mb-3" :class="activeStep === 1 ? 'border-blue-500 text-blue-500' : 'border-gray-200 text-gray-400'">
-                <i data-lucide="server" class="h-4 w-4"></i>
-              </div>
-              <span class="text-xs font-semibold block mb-1" :class="activeStep === 1 ? 'text-blue-600' : 'text-gray-800'">1. Interception</span>
-              <p class="text-xs leading-relaxed text-gray-500">Parse URI parameters natively. Verify format, seed, & categorization.</p>
-              <span x-show="activeStep === 1" class="absolute top-1 right-1 flex h-2 w-2">
-                <span class="relative inline-flex h-2 w-2 bg-blue-500"></span>
-              </span>
-            </div>
-
-            <!-- Step 2 -->
-            <div
-              class="p-4 border transition-colors z-10 flex flex-col items-center text-center relative"
-              :class="activeStep === 2 ? 'bg-white border-blue-500 text-blue-600 font-bold' : 'bg-white border-gray-200 text-gray-500'"
-            >
-              <div class="h-9 w-9 border flex items-center justify-center mb-3" :class="activeStep === 2 ? 'border-blue-500 text-blue-500' : 'border-gray-200 text-gray-400'">
-                <i data-lucide="database" class="h-4 w-4"></i>
-              </div>
-              <span class="text-xs font-semibold block mb-1" :class="activeStep === 2 ? 'text-blue-600' : 'text-gray-800'">2. Vector Evaluation</span>
-              <p class="text-xs leading-relaxed text-gray-500">Formulate prompt vector via Worker AI. Query ArangoDB AQL cursor.</p>
-              <span x-show="activeStep === 2" class="absolute top-1 right-1 flex h-2 w-2">
-                <span class="relative inline-flex h-2 w-2 bg-blue-500"></span>
-              </span>
-            </div>
-
-            <!-- Step 3 -->
-            <div
-              class="p-4 border transition-colors z-10 flex flex-col items-center text-center relative"
-              :class="activeStep === 3 ? 'bg-white border-blue-500 text-blue-600 font-bold' : 'bg-white border-gray-200 text-gray-500'"
-            >
-              <div class="h-9 w-9 border flex items-center justify-center mb-3" :class="activeStep === 3 ? 'border-blue-500 text-blue-500' : 'border-gray-200 text-gray-400'">
-                <i data-lucide="cpu" class="h-4 w-4"></i>
-              </div>
-              <span class="text-xs font-semibold block mb-1" :class="activeStep === 3 ? 'text-blue-600' : 'text-gray-800'">3. Async Worker</span>
-              <p class="text-xs leading-relaxed text-gray-500">If Similarity &lt; 0.85, enqueue KV Job. Generate, upload R2, map vector.</p>
-              <span x-show="activeStep === 3" class="absolute top-1 right-1 flex h-2 w-2">
-                <span class="relative inline-flex h-2 w-2 bg-blue-500"></span>
-              </span>
-            </div>
-
-            <!-- Step 4 -->
-            <div
-              class="p-4 border transition-colors z-10 flex flex-col items-center text-center relative"
-              :class="activeStep === 4 ? 'bg-white border-blue-500 text-blue-600 font-bold' : 'bg-white border-gray-200 text-gray-500'"
-            >
-              <div class="h-9 w-9 border flex items-center justify-center mb-3" :class="activeStep === 4 ? 'border-blue-500 text-blue-500' : 'border-gray-200 text-gray-400'">
-                <i data-lucide="zap" class="h-4 w-4"></i>
-              </div>
-              <span class="text-xs font-semibold block mb-1" :class="activeStep === 4 ? 'text-blue-600' : 'text-gray-800'">4. Delivery & Edge</span>
-              <p class="text-xs leading-relaxed text-gray-500">Render Blurhash metadata OR 302 Redirect to optimized Cloudflare Image Resizing CDN.</p>
-              <span x-show="activeStep === 4" class="absolute top-1 right-1 flex h-2 w-2">
-                <span class="relative inline-flex h-2 w-2 bg-blue-500"></span>
-              </span>
-            </div>
-
-          </div>
-        </div>
-
-        <div class="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
-          
-          <!-- LEFT PANEL: MAIN CONTENT BASED ON ACTIVE TAB (8 columns) -->
-          <div class="lg:col-span-8 space-y-8">
-            
-            <!-- TAB: SANDBOX -->
-            <div x-show="activeTab === 'sandbox'" class="space-y-8" x-transition>
-              
-              <!-- 1. API Playground Controls -->
-              <section class="bg-white border border-gray-300 p-6 relative">
-                <div class="flex justify-between items-center mb-6 pb-2 border-b border-gray-200">
-                  <h2 class="text-sm font-bold text-gray-900 flex items-center gap-2">
-                    <i data-lucide="cpu" class="h-4 w-4 text-blue-500"></i>
-                    Dynamic Request Sandbox
-                  </h2>
-                  <button
-                    x-show="isAdmin"
-                    @click="handleReset()"
-                    class="text-xs text-gray-600 hover:text-red-500 flex items-center gap-1.5 bg-white border border-gray-300 hover:border-red-500 px-3 py-1.5 transition-colors cursor-pointer"
-                  >
-                    <i data-lucide="refresh-cw" class="h-3 w-3"></i>
-                    Reseed Database
-                  </button>
-                </div>
-
-                <div class="space-y-6">
-                  <!-- Presets -->
-                  <div>
-                    <span class="text-xs font-semibold text-gray-600 block mb-2">Test Scenarios (Semantic Presets):</span>
-                    <div class="flex flex-wrap gap-2">
-                      <template x-for="(preset, i) in presets" :key="i">
-                        <button
-                          @click="text = preset.text; category = preset.cat"
-                          class="px-3 py-1.5 text-xs font-medium border transition-colors flex items-center gap-1.5 cursor-pointer"
-                          :class="text === preset.text ? 'bg-white border-blue-500 text-blue-600 font-bold' : 'bg-gray-50 text-gray-700 border-gray-300 hover:bg-gray-100 hover:text-gray-900'"
-                        >
-                          <i data-lucide="sparkles" class="h-3 w-3 text-blue-500"></i>
-                          <span x-text="preset.label"></span>
-                        </button>
-                      </template>
-                    </div>
-                  </div>
-
-                  <!-- Inputs Grid -->
-                  <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    
-                    <!-- Genre Picker -->
-                    <div class="md:col-span-2">
-                      <label class="text-xs font-semibold text-gray-700 block mb-2">
-                        Photography Genre <span class="text-xs text-gray-400 font-mono">(Auto-fills prompt + applies style template)</span>
-                      </label>
-                      <div class="relative">
-                        <select
-                          x-model="selectedGenre"
-                          @change="applyGenre($event.target.value)"
-                          class="w-full bg-white border border-gray-300 px-4 py-2.5 text-xs text-gray-900 focus:outline-none focus:border-blue-500 appearance-none pr-8"
-                        >
-                          <option value="">— Any genre (auto-detect from prompt) —</option>
-                          <template x-for="g in genres" :key="g.slug">
-                            <option :value="g.slug" x-text="g.slug.replace(/-/g,' ').replace(/\b\w/g,c=>c.toUpperCase())"></option>
-                          </template>
-                        </select>
-                        <i data-lucide="chevron-down" class="absolute right-2.5 top-2.5 h-3.5 w-3.5 text-gray-400 pointer-events-none"></i>
-                      </div>
-                      <p class="text-xs text-gray-400 mt-1">106 genres — selecting one seeds the prompt and triggers its curated style template at generation time.</p>
-                    </div>
-
-                    <!-- Text/Semantic search -->
-                    <div class="md:col-span-2">
-                      <label class="text-xs font-semibold text-gray-700 block mb-2 flex justify-between">
-                        <span>Semantic Prompt / Description <span class="text-xs text-blue-600 font-mono">(Triggers embedding pipeline)</span></span>
-                        <span class="text-xs text-gray-400 font-normal">Optional</span>
-                      </label>
-                      <div class="relative">
-                        <input
-                          type="text"
-                          x-model="text"
-                          placeholder="Describe the image you want semantically (e.g. wet cyberpunk streets)..."
-                          class="w-full bg-white border border-gray-300 px-4 py-3 text-xs text-gray-900 placeholder-gray-400 focus:outline-none focus:border-blue-500 pl-10"
-                        />
-                        <i data-lucide="search" class="absolute left-3 top-3.5 h-4 w-4 text-gray-400"></i>
-                      </div>
-                    </div>
-
-                    <!-- Format Selector -->
-                    <div>
-                      <label class="text-xs font-semibold text-gray-700 block mb-2">Output Delivery Format</label>
-                      <div class="grid grid-cols-3 gap-2 bg-gray-50 p-1 border border-gray-300">
-                        <template x-for="f in ['image', 'blurhash', 'lqip']">
-                          <button
-                            type="button"
-                            @click="format = f"
-                            class="py-1.5 text-xs uppercase font-mono font-semibold transition-colors cursor-pointer"
-                            :class="format === f ? 'bg-blue-600 text-white border border-blue-600 font-bold' : 'text-gray-500 hover:text-gray-900'"
-                            x-text="f"
-                          ></button>
-                        </template>
-                      </div>
-                    </div>
-
-                    <!-- Resolution parameters -->
-                    <div>
-                      <label class="text-xs font-semibold text-gray-700 block mb-2">Resolution (Dimensions)</label>
-                      <div class="grid grid-cols-2 gap-2">
-                        <div class="flex items-center bg-white border border-gray-300 px-3 py-1.5">
-                          <span class="text-xs font-mono text-gray-400 mr-2">W</span>
-                          <input
-                            type="number"
-                            x-model.number="width"
-                            class="bg-transparent w-full focus:outline-none text-xs font-mono"
-                          />
-                        </div>
-                        <div class="flex items-center bg-white border border-gray-300 px-3 py-1.5">
-                          <span class="text-xs font-mono text-gray-400 mr-2">H</span>
-                          <input
-                            type="number"
-                            x-model.number="height"
-                            class="bg-transparent w-full focus:outline-none text-xs font-mono"
-                          />
-                        </div>
-                      </div>
-                      
-                      <!-- Resolution Presets -->
-                      <div class="mt-2">
-                        <span class="text-sm font-semibold text-gray-500 uppercase block mb-1">Quick Presets</span>
-                        <div class="flex flex-wrap gap-1.5">
-                          <button
-                            type="button"
-                            @click="width = 1920; height = 1080"
-                            class="px-2 py-0.5 text-xs font-mono bg-gray-100 border border-gray-300 hover:border-blue-500 hover:bg-white text-gray-700 transition-colors cursor-pointer"
-                          >
-                            Desktop 1080p
-                          </button>
-                          <button
-                            type="button"
-                            @click="width = 2560; height = 1440"
-                            class="px-2 py-0.5 text-xs font-mono bg-gray-100 border border-gray-300 hover:border-blue-500 hover:bg-white text-gray-700 transition-colors cursor-pointer"
-                          >
-                            1440p
-                          </button>
-                          <button
-                            type="button"
-                            @click="width = 3840; height = 2160"
-                            class="px-2 py-0.5 text-xs font-mono bg-gray-100 border border-gray-300 hover:border-blue-500 hover:bg-white text-gray-700 transition-colors cursor-pointer"
-                          >
-                            4K UHD
-                          </button>
-                          <button
-                            type="button"
-                            @click="width = 360; height = 800"
-                            class="px-2 py-0.5 text-xs font-mono bg-gray-100 border border-gray-300 hover:border-blue-500 hover:bg-white text-gray-700 transition-colors cursor-pointer"
-                          >
-                            Mobile
-                          </button>
-                          <button
-                            type="button"
-                            @click="width = 768; height = 1024"
-                            class="px-2 py-0.5 text-xs font-mono bg-gray-100 border border-gray-300 hover:border-blue-500 hover:bg-white text-gray-700 transition-colors cursor-pointer"
-                          >
-                            Tablet iPad
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-
-                    <!-- Category Selector -->
-                    <div>
-                      <label class="text-xs font-semibold text-gray-700 block mb-2">
-                        Hard Filter Category <span class="text-xs text-gray-400 font-mono">(Fallback)</span>
-                      </label>
-                      <select
-                        x-model="category"
-                        class="w-full bg-white border border-gray-300 px-4 py-2.5 text-xs text-gray-900 focus:outline-none focus:border-blue-500"
-                      >
-                        <option value="nature">Nature</option>
-                        <option value="urban">Urban</option>
-                        <option value="space">Space</option>
-                        <option value="architecture">Architecture</option>
-                        <option value="animals">Animals</option>
-                      </select>
-                    </div>
-
-                    <!-- Seed Selector -->
-                    <div>
-                      <label class="text-xs font-semibold text-gray-700 block mb-2">
-                        Pseudo-Random Seed <span class="text-xs text-gray-400 font-mono">(Entropy)</span>
-                      </label>
-                      <input
-                        type="number"
-                        x-model.number="seed"
-                        class="w-full bg-white border border-gray-300 px-4 py-2 text-xs font-mono focus:outline-none focus:border-blue-500"
-                      />
-                    </div>
-
-                  </div>
-
-                  <!-- Live URL preview -->
-                  <div class="bg-gray-50 border border-gray-200 px-3 py-2 flex items-center gap-2">
-                    <span class="text-xs font-bold text-blue-600 font-mono shrink-0">GET</span>
-                    <code
-                      class="text-xs text-gray-600 font-mono truncate flex-1"
-                      x-text="`/api/cdn/${width}/${height}?` + new URLSearchParams(Object.fromEntries([['category',category],['seed',seed],['format',format],...(text ? [['text',text]] : [])])).toString()"
-                    ></code>
-                  </div>
-
-                  <!-- Request Action Button -->
-                  <button
-                    @click="executeApiCall()"
-                    :disabled="loading"
-                    class="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-gray-200 disabled:text-gray-400 disabled:cursor-not-allowed text-white py-3 px-4 text-xs font-semibold flex items-center justify-center gap-2 border border-blue-700 transition-colors cursor-pointer"
-                  >
-                    <span x-show="loading" class="flex items-center gap-2">
-                      <i data-lucide="refresh-cw" class="h-4 w-4 animate-spin"></i>
-                      Processing Edge Compute Pipelines...
-                    </span>
-                    <span x-show="!loading" class="flex items-center gap-2">
-                      <i data-lucide="play" class="h-4 w-4 fill-current"></i>
-                      Execute CDN GET Request
-                    </span>
-                  </button>
-
-                </div>
-              </section>
-
-
-
-              <!-- 3. API Response Output -->
-              <div x-show="testResult !== null" x-transition>
-
-                <!-- Full GET URL bar -->
-                <div class="bg-gray-900 border border-gray-700 px-4 py-2.5 flex items-center gap-2 min-w-0">
-                  <span class="text-xs font-bold text-green-400 font-mono shrink-0">GET</span>
-                  <code
-                    class="flex-1 text-xs text-gray-100 font-mono break-all select-all leading-relaxed min-w-0"
-                    x-text="testResult ? testResult.requestUrl : ''"
-                  ></code>
-                  <button
-                    x-data="{ copied: false }"
-                    @click="navigator.clipboard.writeText(testResult.requestUrl).then(() => { copied = true; setTimeout(() => copied = false, 1500) })"
-                    class="shrink-0 text-gray-400 hover:text-white transition-colors p-1.5 cursor-pointer"
-                    title="Copy URL"
-                  >
-                    <i x-show="!copied" data-lucide="copy" class="h-3.5 w-3.5"></i>
-                    <i x-show="copied" data-lucide="check" class="h-3.5 w-3.5 text-green-400"></i>
-                  </button>
-                  <a
-                    :href="testResult ? testResult.requestUrl : '#'"
-                    target="_blank"
-                    rel="noreferrer"
-                    class="shrink-0 text-gray-400 hover:text-white transition-colors p-1.5"
-                    title="Open in new tab"
-                  >
-                    <i data-lucide="external-link" class="h-3.5 w-3.5"></i>
-                  </a>
-                </div>
-
-                <!-- Response details -->
-                <div class="bg-white border border-gray-300 border-t-0 p-6">
-                <h3 class="text-xs font-bold text-gray-900 mb-4 flex items-center gap-2">
-                  <i data-lucide="eye" class="h-4 w-4 text-green-600"></i>
-                  Client-Side Delivery Response
-                </h3>
-
-                <div class="grid grid-cols-1 md:grid-cols-12 gap-6">
-                  
-                  <!-- Left: Headers / Metadata -->
-                  <div class="md:col-span-5 space-y-4 font-mono">
-                    <div class="bg-gray-50 p-4 border border-gray-300 text-xs space-y-2">
-                      <div class="flex justify-between border-b border-gray-200 pb-1.5 mb-1.5">
-                        <span class="text-gray-500">HTTP Status</span>
-                        <span class="font-bold" :class="testResult && testResult.status === 302 ? 'text-blue-600' : 'text-green-600'" x-text="testResult ? (testResult.status === 302 ? '302 Found (image redirect)' : '200 OK (JSON)') : ''"></span>
-                      </div>
-                      <div class="flex justify-between">
-                        <span class="text-gray-500">Execution Time</span>
-                        <span class="text-gray-950 font-semibold" x-text="testResult ? testResult.duration + ' ms' : ''"></span>
-                      </div>
-                      <div class="flex justify-between">
-                        <span class="text-gray-500">X-Similarity-Score</span>
-                        <span class="font-bold" :class="testResult && testResult.similarity >= 0.85 ? 'text-green-600' : 'text-yellow-600'" x-text="testResult ? testResult.similarity.toFixed(4) : ''"></span>
-                      </div>
-                      <div class="flex justify-between">
-                        <span class="text-gray-500">X-Async-Generated</span>
-                        <span class="font-bold" :class="testResult && testResult.isAsync ? 'text-yellow-600' : 'text-gray-500'" x-text="testResult ? (testResult.isAsync ? 'TRUE (Queued)' : 'FALSE') : ''"></span>
-                      </div>
-                      <div class="flex justify-between" x-show="testResult && testResult.genre">
-                        <span class="text-gray-500">X-Genre</span>
-                        <span class="font-bold text-purple-600 font-mono text-xs" x-text="testResult ? testResult.genre : ''"></span>
-                      </div>
-                      <div class="flex-col pt-1 border-t border-gray-200 mt-1.5">
-                        <span class="text-gray-500 block mb-1">Cache-Control</span>
-                        <span class="text-gray-900 break-all" x-text="testResult ? testResult.cacheControl : ''"></span>
-                      </div>
-                    </div>
-
-                    <!-- Match details card -->
-                    <div class="bg-white p-4 border border-gray-300 text-xs">
-                      <span class="text-gray-600 font-semibold block mb-2">Evaluated Match Document</span>
-                      <div class="space-y-1.5" x-show="testResult">
-                        <p class="text-gray-950 font-medium" x-text="testResult && testResult.matchedImage ? '&quot;' + testResult.matchedImage.text + '&quot;' : '(no match loaded — authenticate to inspect)'"></p>
-                        <div class="flex gap-2 text-xs font-mono">
-                          <span class="px-2 py-0.5 border border-gray-200 text-gray-600" x-text="testResult && testResult.matchedImage ? 'ID: ' + testResult.matchedImage._key : 'ID: —'"></span>
-                          <span class="px-2 py-0.5 border border-gray-200 text-gray-600" x-text="testResult && testResult.matchedImage ? 'Category: ' + testResult.matchedImage.category : 'Category: —'"></span>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-
-                  <!-- Right: Render / Image view -->
-                  <div class="md:col-span-7 flex flex-col justify-center">
-                    <div class="aspect-video w-full bg-white border border-gray-300 relative overflow-hidden flex items-center justify-center">
-                      
-                      <!-- Blurhash Display -->
-                      <div x-show="format === 'blurhash'" class="absolute inset-0 flex flex-col items-center justify-center p-4">
-                        <!-- Canvas: shown only when real blurhash returned -->
-                        <template x-if="testResult && testResult.blurhash">
-                          <div class="w-full h-full max-h-40 relative overflow-hidden border border-gray-300">
-                            <canvas id="blurhash-canvas" class="w-full h-full object-cover rounded-lg filter blur-md"></canvas>
-                          </div>
-                        </template>
-                        <!-- Source image preview as fallback when no blurhash computed -->
-                        <template x-if="testResult && !testResult.blurhash">
-                          <div class="w-full h-full max-h-40 relative overflow-hidden border border-gray-300">
-                            <img :src="testResult.url" class="w-full h-full object-cover filter blur-sm" referrerpolicy="no-referrer" alt="source" />
-                          </div>
-                        </template>
-                        <div class="mt-3 text-center space-y-1 w-full">
-                          <template x-if="testResult && testResult.blurhash">
-                            <div>
-                              <span class="text-xs text-gray-500 font-mono">Decoded Blurhash (32x32 DCT grid)</span>
-                              <p class="text-xs font-mono text-blue-600 bg-gray-50 border border-gray-300 px-3 py-1 select-all break-all max-w-full" x-text="testResult.blurhash"></p>
-                            </div>
-                          </template>
-                          <template x-if="testResult && !testResult.blurhash">
-                            <p class="text-xs font-mono text-gray-400">Blurhash not yet computed — showing source image preview. Similarity: <span class="text-blue-600 font-bold" x-text="testResult.similarity.toFixed(4)"></span></p>
-                          </template>
-                        </div>
-                      </div>
-
-                      <!-- LQIP Display -->
-                      <div x-show="format === 'lqip'" class="relative w-full h-full">
-                        <img 
-                          :src="testResult ? testResult.url : ''" 
-                          alt="LQIP" 
-                          class="w-full h-full object-cover filter blur-md opacity-90 scale-105"
-                          referrerpolicy="no-referrer"
-                        />
-                        <div class="absolute inset-0 bg-white/50 flex items-center justify-center">
-                          <div class="text-center bg-white border border-gray-300 p-3">
-                            <span class="text-xs font-mono text-yellow-600 block mb-1">Serving Low-Quality Placeholder</span>
-                            <span class="text-xs text-gray-500 font-mono" x-text="testResult ? '302 Location: ' + testResult.url.slice(0, 45) + '...' : ''"></span>
-                          </div>
-                        </div>
-                      </div>
-
-                      <!-- Standard Image Display -->
-                      <div x-show="format === 'image'" class="relative w-full h-full">
-                        <img 
-                          :src="testResult ? testResult.url : ''" 
-                          alt="CDN Response" 
-                          class="w-full h-full object-cover transition-opacity duration-300"
-                          referrerpolicy="no-referrer"
-                        />
-                      </div>
-
-                      <!-- Top Badge: Similarity status -->
-                      <div class="absolute top-3 right-3 flex items-center gap-1.5 bg-white border border-gray-300 px-3 py-1.5 shadow-sm">
-                        <span class="relative flex h-1.5 w-1.5">
-                          <span class="animate-ping absolute inline-flex h-full w-full opacity-75" :class="testResult && testResult.similarity >= 0.85 ? 'bg-green-400' : 'bg-yellow-400'"></span>
-                          <span class="relative inline-flex h-1.5 w-1.5" :class="testResult && testResult.similarity >= 0.85 ? 'bg-green-500' : 'bg-yellow-500'"></span>
-                        </span>
-                        <span class="text-xs font-bold text-gray-800" x-text="testResult && testResult.similarity >= 0.85 ? 'EXACT MATCH READY' : 'BACKGROUND GENERATION TRIGGERED'"></span>
-                      </div>
-
-                    </div>
-
-                    <!-- External link to raw CDN URL -->
-                    <a
-                      :href="testResult ? testResult.url : '#'"
-                      target="_blank"
-                      rel="noreferrer"
-                      class="mt-3 text-xs text-blue-600 hover:text-blue-800 font-mono flex items-center gap-1.5 self-end hover:underline cursor-pointer"
-                    >
-                      <span x-text="format === 'blurhash' ? 'Open Source Image URL' : 'Open Raw CDN URL (follows redirect)'"></span>
-                      <i data-lucide="external-link" class="h-3 w-3"></i>
-                    </a>
-                  </div>
-
-                </div>
-                </div><!-- end response details -->
-              </div><!-- end result wrapper -->
-
-            </div>
-
-            <!-- TAB: DATABASE / VECTOR STORE -->
-            <div x-show="activeTab === 'database'" class="space-y-6" x-transition>
-              <!-- Auth lock -->
-              <template x-if="!isAdmin">
-                <div class="bg-white border border-gray-300 p-12 flex flex-col items-center justify-center gap-4 text-center">
-                  <i data-lucide="lock" class="h-10 w-10 text-gray-400"></i>
-                  <h3 class="text-sm font-bold text-gray-700">Admin Access Required</h3>
-                </div>
-              </template>
-              <div x-show="isAdmin" class="bg-white border border-gray-300 p-6">
-                <!-- Header info -->
-                <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6 pb-4 border-b border-gray-300">
-                  <div>
-                    <h2 class="text-sm font-bold text-gray-900 flex items-center gap-2">
-                      <i data-lucide="database" class="h-4 w-4 text-blue-500"></i>
-                      ArangoDB: Images Collection Vector Storage
-                    </h2>
-                    <p class="text-xs text-gray-500">Stores image metadata along with 128-dimensional dense vectors (using gemini-embedding-2)</p>
-                  </div>
-                  <button 
-                    @click="handleReset()"
-                    class="text-xs text-gray-600 hover:text-blue-600 flex items-center gap-1.5 bg-white border border-gray-300 px-3 py-1.5 transition-colors cursor-pointer"
-                  >
-                    <i data-lucide="refresh-cw" class="h-3 w-3"></i>
-                    Reset Collection
-                  </button>
-                </div>
-
-                <!-- Filter Pills with count badges -->
-                <div class="flex flex-wrap gap-2 mb-6">
-                  <template x-for="catFilter in ['all', 'nature', 'urban', 'space', 'architecture', 'animals']">
-                    <button
-                      @click="dbCategoryFilter = catFilter"
-                      class="px-3 py-1.5 text-xs font-mono font-semibold border transition-colors flex items-center gap-2 cursor-pointer"
-                      :class="dbCategoryFilter === catFilter ? 'bg-white text-blue-600 border-blue-500 font-bold' : 'bg-gray-50 text-gray-600 border-gray-300 hover:bg-gray-100 hover:text-gray-900'"
-                    >
-                      <span class="capitalize" x-text="catFilter"></span>
-                      <span class="text-xs px-1.5 py-0.2 font-bold" :class="dbCategoryFilter === catFilter ? 'border border-blue-500 text-blue-500' : 'bg-gray-200 text-gray-600'" x-text="catFilter === 'all' ? images.length : images.filter(img => img.category.toLowerCase() === catFilter.toLowerCase()).length"></span>
-                    </button>
-                  </template>
-                </div>
-
-                <!-- Split Layout: Left Table Data Grid, Right Inspector Panel -->
-                <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
-                  
-                  <!-- Left: Interactive Data Grid (7 columns) -->
-                  <div class="lg:col-span-7 space-y-3">
-                    <div class="text-xs font-mono font-bold text-gray-500 px-2 flex items-center justify-between">
-                      <span>SELECT A RECORD TO INSPECT VECTORS</span>
-                      <span x-text="'Showing ' + filteredImages.length + ' docs'"></span>
-                    </div>
-                    
-                    <div class="bg-white border border-gray-300 overflow-hidden">
-                      <!-- Table Headers -->
-                      <div class="grid grid-cols-12 gap-2 px-4 py-2 bg-gray-50 border-b border-gray-300 text-xs font-mono text-gray-500 uppercase font-semibold">
-                        <div class="col-span-3">Key / ID</div>
-                        <div class="col-span-2">Preview</div>
-                        <div class="col-span-5">Prompt Context</div>
-                        <div class="col-span-2 text-right">Seed</div>
-                      </div>
-
-                      <!-- Table Rows -->
-                      <div class="divide-y divide-gray-200 max-h-96 overflow-y-auto">
-                        <template x-for="img in filteredImages" :key="img._key">
-                          <button
-                            @click="selectedDbImageKey = img._key"
-                            class="w-full text-left grid grid-cols-12 gap-2 px-4 py-3 items-center hover:bg-gray-50 transition-colors cursor-pointer"
-                            :class="selectedDbImageKey === img._key ? 'border-l-4 border-blue-500 pl-3' : 'pl-4'"
-                          >
-                            <!-- Document Key -->
-                            <div class="col-span-3 font-mono text-xs truncate text-gray-600 font-medium">
-                              <span :class="selectedDbImageKey === img._key ? 'text-blue-600 font-bold' : ''" x-text="img._key"></span>
-                            </div>
-
-                            <!-- Thumbnail Preview -->
-                            <div class="col-span-2">
-                              <div class="h-8 w-8 bg-gray-100 overflow-hidden border border-gray-300">
-                                <img :src="img.sourceUrl" class="w-full h-full object-cover" alt="" referrerpolicy="no-referrer" />
-                              </div>
-                            </div>
-
-                            <!-- Prompt Description -->
-                            <div class="col-span-5 pr-2">
-                              <p class="text-xs text-gray-800 font-medium truncate" x-text="img.text"></p>
-                              <span class="text-xs uppercase font-mono text-gray-400 font-semibold" x-text="img.category"></span>
-                            </div>
-
-                            <!-- Seed -->
-                            <div class="col-span-2 text-right font-mono text-xs text-gray-600" x-text="img.seed"></div>
-                          </button>
-                        </template>
-                        
-                        <div x-show="filteredImages.length === 0" class="p-8 text-center font-mono text-xs text-gray-500 italic">
-                          No records found matching this category.
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-
-                  <!-- Right: Vector Inspector Detail Panel (5 columns) -->
-                  <div class="lg:col-span-5">
-                    <div x-show="selectedDoc === undefined" class="bg-gray-50 border border-gray-300 p-6 text-center text-gray-500 italic font-mono text-xs">
-                      Seeding or loading documents...
-                    </div>
-
-                    <div x-show="selectedDoc !== undefined" class="bg-white border border-gray-300 p-4 space-y-4">
-                      <div class="flex items-center justify-between pb-2 border-b border-gray-200 text-xs font-mono">
-                        <span class="text-gray-700 flex items-center gap-1.5 font-bold">
-                          <span class="h-1.5 w-1.5 bg-blue-500"></span>
-                          Vector Inspector
-                        </span>
-                        <span class="text-xs text-gray-500" x-text="'_key: ' + (selectedDoc ? selectedDoc._key : '')"></span>
-                      </div>
-
-                      <!-- Large Image Preview -->
-                      <div class="aspect-video w-full bg-gray-50 border border-gray-300 overflow-hidden relative">
-                        <img :src="selectedDoc ? selectedDoc.sourceUrl : ''" class="w-full h-full object-cover" alt="" referrerpolicy="no-referrer" />
-                        <div class="absolute bottom-2 left-2 px-2 py-0.5 bg-white border border-gray-300 text-xs uppercase font-mono text-gray-700 font-semibold" x-text="'Category: ' + (selectedDoc ? selectedDoc.category : '')"></div>
-                      </div>
-
-                      <!-- Prompt and Seed Details -->
-                      <div class="space-y-1">
-                        <span class="text-xs font-mono uppercase text-gray-400 font-bold tracking-wider">Semantic Prompt</span>
-                        <p class="text-xs font-semibold text-gray-950" x-text="selectedDoc ? '&quot;' + selectedDoc.text + '&quot;' : ''"></p>
-                        <div class="flex items-center gap-4 text-xs text-gray-500 font-mono pt-1">
-                          <span>Seed: <strong class="text-gray-700 font-bold" x-text="selectedDoc ? selectedDoc.seed : ''"></strong></span>
-                          <span>Storage: <span class="text-gray-600 font-semibold">Cloudflare R2</span></span>
-                        </div>
-                      </div>
-
-                      <!-- Interactive Embeddings Visualizer -->
-                      <div class="space-y-2 pt-2 border-t border-gray-200">
-                        <span class="text-xs font-mono uppercase text-blue-600 font-bold tracking-wider block">Dense Embeddings Index (10-dim Vector)</span>
-                        
-                        <div class="space-y-1.5">
-                          <template x-for="(label, idx) in semanticLabels">
-                            <div class="flex items-center gap-2 text-xs font-mono">
-                              <span class="w-20 text-gray-500 truncate text-left" x-text="label"></span>
-                              
-                              <!-- Horizontal progress bar -->
-                              <div class="flex-1 bg-gray-100 h-2.5 overflow-hidden border border-gray-200 relative">
-                                <div 
-                                  class="bg-blue-600 h-full transition-all duration-300"
-                                  :style="selectedDoc ? 'width: ' + Math.min(100, selectedDoc.embedding[idx] * 100) + '%' : 'width: 0%'"
-                                ></div>
-                              </div>
-                              
-                              <span class="w-8 text-right font-bold text-blue-600" x-text="selectedDoc ? selectedDoc.embedding[idx].toFixed(2) : '0.00'"></span>
-                            </div>
-                          </template>
-                        </div>
-                      </div>
-
-                      <!-- Quick load button -->
-                      <button
-                        @click="text = selectedDoc.text; category = selectedDoc.category.toLowerCase(); seed = selectedDoc.seed; activeTab = 'sandbox'"
-                        class="w-full mt-2 bg-white hover:bg-gray-100 text-blue-600 border border-blue-600 text-xs font-semibold py-2 px-3 flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
-                      >
-                        <i data-lucide="play" class="h-3.5 w-3.5 fill-current"></i>
-                        Load Into Sandbox Playground
-                      </button>
-                    </div>
-                  </div>
-
-                </div>
-
-              </div>
-            </div><!-- end database tab -->
-
-            <!-- TAB: ARANGODB QUEUES -->
-            <div x-show="activeTab === 'queue'" class="space-y-6" x-transition>
-              <template x-if="!isAdmin">
-                <div class="bg-white border border-gray-300 p-12 flex flex-col items-center justify-center gap-4 text-center">
-                  <i data-lucide="lock" class="h-10 w-10 text-gray-400"></i>
-                  <h3 class="text-sm font-bold text-gray-700">Admin Access Required</h3>
-                  <p class="text-xs text-gray-500 max-w-sm">Append <code class="bg-gray-100 text-blue-600 px-1 font-mono">?key=ADMIN_KEY</code> to the URL to authenticate this session.</p>
-                </div>
-              </template>
-              <div x-show="isAdmin" class="bg-white border border-gray-300 p-6">
-                <h2 class="text-sm font-bold text-gray-900 mb-2 flex items-center gap-2">
-                  <i data-lucide="layers" class="h-4 w-4 text-blue-500"></i>
-                  ArangoDB: Native DB-Backed Queue Engine
-                </h2>
-                <p class="text-xs text-gray-500 mb-6">
-                  A high-performance database-backed queue processing engine. Triggers direct Gemini image generation and optimizes resolutions dynamically when similarity drops below 0.85.
-                </p>
-
-                <div x-show="queue.length === 0" class="bg-gray-50 border border-gray-300 p-8 text-center text-gray-500 space-y-2">
-                  <i data-lucide="layers" class="h-8 w-8 text-gray-400 mx-auto"></i>
-                  <p class="text-xs font-semibold text-gray-700">Queue is currently empty</p>
-                  <p class="text-xs">Execute a semantic request in the playground with a low similarity match to trigger background tasks!</p>
-                </div>
-
-                <div x-show="queue.length > 0" class="space-y-4">
-                  <template x-for="job in queue" :key="job.id">
-                    <div class="bg-white border border-gray-300 p-4 space-y-3">
-                      <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs">
-                        <div class="flex items-center gap-2">
-                          <span class="text-xs font-mono px-2 py-0.5 border border-blue-500 text-blue-600 font-semibold uppercase" x-text="job.id"></span>
-                          <span class="text-gray-600">Prompt: <strong class="text-gray-900" x-text="'&quot;' + job.prompt + '&quot;'"></strong></span>
-                        </div>
-                        <div class="flex items-center gap-3">
-                          <span class="text-xs text-gray-500 font-mono font-normal" x-text="'Enqueued: ' + job.createdAt"></span>
-                          <span class="text-xs font-semibold uppercase px-2 py-0.5 border" 
-                            :class="job.status === 'completed' ? 'border-green-500 text-green-600' : (job.status === 'processing' ? 'border-blue-500 text-blue-600' : 'border-gray-300 text-gray-500')"
-                            x-text="job.status"
-                          ></span>
-                        </div>
-                      </div>
-
-                      <!-- Live Progress Bar -->
-                      <div class="space-y-1">
-                        <div class="flex justify-between text-xs text-gray-500">
-                          <span x-text="
-                            job.status === 'pending' ? 'Waiting for worker thread...' :
-                            job.status === 'failed' ? 'Job failed' :
-                            job.status === 'completed' ? 'Completed — image indexed in ArangoDB' :
-                            job.progress <= 5 ? 'Worker picked up job...' :
-                            job.progress <= 25 ? 'Fetching base image + computing embedding vector...' :
-                            'Generating image via provider chain, resizing variants...'
-                          "></span>
-                          <span x-text="job.progress + '%'"></span>
-                        </div>
-                        <div class="w-full bg-gray-100 h-2 overflow-hidden border border-gray-300">
-                          <div 
-                            class="bg-blue-600 h-full transition-all duration-300" 
-                            :style="'width: ' + job.progress + '%'"
-                          ></div>
-                        </div>
-                      </div>
-
-                    </div>
-                  </template>
-                </div>
-
-              </div>
-            </div><!-- end queue tab -->
-
-            <!-- TAB: SRCSET & ASYNC -->
-            <div x-show="activeTab === 'srcset'" class="space-y-6" x-transition>
-              <div class="bg-white border border-gray-300 p-6 space-y-6">
-                <div>
-                  <h2 class="text-sm font-bold text-gray-900 flex items-center gap-2">
-                    <i data-lucide="layout" class="h-4 w-4 text-purple-500"></i>
-                    srcset Endpoint &amp; Respond-Async
-                  </h2>
-                  <p class="text-xs text-gray-500 mt-1">
-                    <code class="bg-gray-100 text-purple-600 px-1 font-mono">GET /api/cdn/srcset</code> returns a ready-to-use <code class="bg-gray-100 text-blue-600 px-1 font-mono">srcset</code> payload for native browser lazy loading.
-                    Add <code class="bg-gray-100 text-orange-600 px-1 font-mono">Prefer: respond-async</code> header to get a non-blocking 202 response with a poll URL.
-                  </p>
-                </div>
-
-                <!-- srcset tester -->
-                <div class="space-y-3">
-                  <h3 class="text-xs font-bold text-gray-800 uppercase tracking-wider font-mono border-b border-gray-200 pb-1.5 flex items-center gap-1.5">
-                    <span class="h-2 w-2 bg-purple-500"></span>
-                    srcset Tester
-                  </h3>
-                  <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
-                    <div class="md:col-span-2">
-                      <label class="text-xs font-semibold text-gray-700 block mb-1">Text Query</label>
-                      <input type="text" x-model="srcsetText" placeholder="e.g. misty mountain at dawn"
-                        class="w-full bg-white border border-gray-300 px-3 py-2 text-xs font-mono text-gray-900 focus:outline-none focus:border-purple-500" />
-                    </div>
-                    <div>
-                      <label class="text-xs font-semibold text-gray-700 block mb-1">Output Format</label>
-                      <select x-model="srcsetOutput" class="w-full bg-white border border-gray-300 px-3 py-2 text-xs font-mono text-gray-900 focus:outline-none focus:border-purple-500">
-                        <option value="webp">webp</option>
-                        <option value="jpg">jpg</option>
-                        <option value="png">png</option>
-                      </select>
-                    </div>
-                  </div>
-                  <div class="flex items-center gap-4">
-                    <label class="flex items-center gap-2 text-xs font-semibold text-gray-700 cursor-pointer">
-                      <input type="checkbox" x-model="srcsetAsync" class="h-3 w-3 rounded border-gray-300 text-orange-500" />
-                      <span>Send <code class="bg-orange-50 text-orange-600 px-1 font-mono border border-orange-200">Prefer: respond-async</code></span>
-                    </label>
-                    <button @click="executeSrcset()"
-                      class="bg-purple-600 hover:bg-purple-700 text-white font-semibold py-2 px-5 border border-purple-700 transition-colors cursor-pointer text-xs flex items-center gap-2">
-                      <i data-lucide="send" class="h-3.5 w-3.5"></i>
-                      Execute
-                    </button>
-                  </div>
-                </div>
-
-                <!-- srcset result -->
-                <div x-show="srcsetResult" class="space-y-4">
-                  <h3 class="text-xs font-bold text-gray-800 uppercase tracking-wider font-mono border-b border-gray-200 pb-1.5 flex items-center gap-1.5">
-                    <span class="h-2 w-2 bg-green-500"></span>
-                    Response
-                  </h3>
-
-                  <!-- Status badge -->
-                  <div class="flex items-center gap-3">
-                    <span class="text-xs font-mono px-2 py-0.5 border font-bold"
-                      :class="srcsetResult?.status === 202 ? 'border-orange-400 text-orange-600 bg-orange-50' : 'border-green-500 text-green-700 bg-green-50'"
-                      x-text="srcsetResult?.status === 202 ? '202 Accepted (async)' : '200 OK'"></span>
-                    <span x-show="srcsetResult?.similarity" class="text-xs text-gray-500 font-mono">
-                      similarity: <span class="font-bold text-gray-800" x-text="srcsetResult?.similarity?.toFixed ? srcsetResult.similarity.toFixed(4) : srcsetResult?.similarity"></span>
-                    </span>
-                    <span x-show="srcsetResult?.status === 202" class="text-xs text-orange-600 font-mono flex items-center gap-1">
-                      <i data-lucide="clock" class="h-3 w-3"></i>
-                      Polling every 3s...
-                    </span>
-                  </div>
-
-                  <!-- Preview image -->
-                  <div x-show="srcsetResult?.src" class="flex gap-4 items-start">
-                    <div class="border border-gray-200 overflow-hidden bg-gray-100 flex-shrink-0" style="width:120px;height:80px">
-                      <img :src="srcsetResult?.src" :alt="srcsetResult?.alt"
-                        class="w-full h-full object-cover"
-                        loading="lazy" />
-                    </div>
-                    <div class="flex-1 min-w-0">
-                      <p class="text-xs text-gray-500 mb-1">Default <code class="font-mono">src</code></p>
-                      <p class="text-xs font-mono text-blue-700 break-all" x-text="srcsetResult?.src"></p>
-                      <p class="text-xs text-gray-500 mt-2 mb-1">Key / Format</p>
-                      <p class="text-xs font-mono text-gray-800" x-text="`${srcsetResult?.key} · ${srcsetResult?.format}`"></p>
-                    </div>
-                  </div>
-
-                  <!-- srcset value -->
-                  <div x-show="srcsetResult?.srcset">
-                    <p class="text-xs font-semibold text-gray-700 mb-1">srcset <span class="font-normal text-gray-400" x-text="`(${srcsetResult?.srcset?.split(',').length || 0} breakpoints)`"></span></p>
-                    <pre class="bg-gray-900 text-green-400 text-xs p-3 overflow-x-auto font-mono leading-relaxed rounded-none whitespace-pre-wrap break-all" x-text="srcsetResult?.srcset?.split(',').join(',\n')"></pre>
-                  </div>
-
-                  <!-- sizes -->
-                  <div x-show="srcsetResult?.sizes">
-                    <p class="text-xs font-semibold text-gray-700 mb-1">sizes</p>
-                    <code class="bg-gray-100 text-gray-800 text-xs px-2 py-1 font-mono block" x-text="srcsetResult?.sizes"></code>
-                  </div>
-
-                  <!-- HTML snippet -->
-                  <div x-show="srcsetResult?.src">
-                    <p class="text-xs font-semibold text-gray-700 mb-1">Ready-to-use HTML</p>
-                    <pre class="bg-gray-900 text-yellow-300 text-xs p-3 overflow-x-auto font-mono rounded-none whitespace-pre-wrap" x-text="buildImgTag()"></pre>
-                  </div>
-
-                  <!-- Async polling result -->
-                  <div x-show="srcsetResult?.status === 202" class="bg-orange-50 border border-orange-200 p-3 text-xs text-orange-800 space-y-1">
-                    <p class="font-semibold flex items-center gap-1"><i data-lucide="clock" class="h-3.5 w-3.5"></i> Async Job: <span x-text="srcsetResult?.jobId" class="font-mono"></span></p>
-                    <p>Poll URL: <code class="font-mono text-orange-700 break-all" x-text="srcsetPollUrl"></code></p>
-                    <p class="text-gray-500">Fallback image served while generating. Result auto-updates when ready.</p>
-                  </div>
-                </div>
-
-                <!-- Reference code -->
-                <div class="space-y-3 border-t border-gray-200 pt-4">
-                  <h3 class="text-xs font-bold text-gray-800 uppercase tracking-wider font-mono pb-1 flex items-center gap-1.5">
-                    <span class="h-2 w-2 bg-blue-500"></span>
-                    Integration Examples
-                  </h3>
-                  <pre class="bg-gray-900 text-gray-300 text-xs p-4 overflow-x-auto font-mono leading-relaxed rounded-none"><!-- Instant srcset (blocking) -->
+	<head>
+		<meta charset="UTF-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+		<title>Lorem Ipsum Photos API Playground</title>
+
+		<!-- Google Fonts -->
+		<link rel="preconnect" href="https://fonts.googleapis.com">
+		<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+		<!-- Tailwind Play CDN -->
+		<link rel="stylesheet" href="https://cdn.html-first.com/litewind-2.0.1.css" />
+		<!-- Lucide Icons CDN -->
+		<script src="https://unpkg.com/lucide@latest"></script>
+		<!-- AlpineJS CDN -->
+		<script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+	</head>
+	<body class="bg-gray-50 text-gray-900 font-sans antialiased">
+		<div id="root" x-data="appState" class="min-h-screen bg-gray-50 flex flex-col">
+
+			<!-- 1. APP HEADER -->
+			<header class="border-b border-gray-300 bg-white sticky top-0 z-50 px-6 py-4">
+				<div class="max-w-7xl mx-auto flex flex-col md:flex-row md:items-center justify-between gap-4">
+					<div class="flex items-center gap-3">
+						<div class="h-10 w-10 border border-gray-900 bg-white flex items-center justify-center">
+							<i data-lucide="zap" class="h-5 w-5 text-gray-900"></i>
+						</div>
+						<div>
+							<div class="flex items-center gap-2">
+								<h1 id="app-title" class="text-lg font-bold tracking-tight text-gray-900">
+									Lorem Ipsum Photos
+								</h1>
+							</div>
+							<p class="text-xs text-gray-500">Zero-SDK Edge Optimized Dynamic Image CDN</p>
+						</div>
+					</div>
+
+					<!-- Nav Tabs -->
+					<div class="flex items-center bg-gray-50 p-1 border border-gray-300 gap-1">
+						<button
+							@click="activeTab = 'sandbox'"
+							class="flex items-center gap-2 px-4 py-2 text-xs font-medium transition-colors"
+							:class="activeTab === 'sandbox' ? 'bg-blue-600 text-white border border-blue-600 font-bold' : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'"
+						>
+							<i data-lucide="cpu" class="h-3.5 w-3.5"></i>
+							API Sandbox
+						</button>
+						<button
+							x-show="isAdmin"
+							@click="activeTab = 'database'"
+							class="flex items-center gap-2 px-4 py-2 text-xs font-medium transition-colors"
+							:class="activeTab === 'database' ? 'bg-blue-600 text-white border border-blue-600 font-bold' : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'"
+						>
+							<i data-lucide="database" class="h-3.5 w-3.5"></i>
+							ArangoDB Vector
+							<i x-show="!isAdmin" data-lucide="lock" class="h-3 w-3 text-gray-400"></i>
+						</button>
+						<button
+							x-show="isAdmin"
+							@click="activeTab = 'queue'"
+							class="flex items-center gap-2 px-4 py-2 text-xs font-medium transition-colors relative"
+							:class="activeTab === 'queue' ? 'bg-blue-600 text-white border border-blue-600 font-bold' : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'"
+						>
+							<i data-lucide="layers" class="h-3.5 w-3.5"></i>
+							ArangoDB Queue
+							<i x-show="!isAdmin" data-lucide="lock" class="h-3 w-3 text-gray-400"></i>
+							<span x-show="isAdmin && activeQueueCount > 0" class="absolute top-1 right-1 h-1.5 w-1.5 bg-yellow-500"></span>
+						</button>
+						<button
+							@click="activeTab = 'srcset'"
+							class="flex items-center gap-2 px-4 py-2 text-xs font-medium transition-colors"
+							:class="activeTab === 'srcset' ? 'bg-purple-600 text-white border border-purple-600 font-bold' : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'"
+						>
+							<i data-lucide="layout" class="h-3.5 w-3.5"></i>
+							Srcset / Async
+						</button>
+						<button
+							x-show="isAdmin"
+							@click="activeTab = 'settings'"
+							class="flex items-center gap-2 px-4 py-2 text-xs font-medium transition-colors"
+							:class="activeTab === 'settings' ? 'bg-blue-600 text-white border border-blue-600 font-bold' : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'"
+						>
+							<i data-lucide="settings" class="h-3.5 w-3.5"></i>
+							System Settings
+							<i x-show="!isAdmin" data-lucide="lock" class="h-3 w-3 text-gray-400"></i>
+						</button>
+					</div>
+				</div>
+			</header>
+
+			<!-- MAIN CONTAINER -->
+			<main class="max-w-7xl mx-auto px-6 py-8 space-y-6 flex-1 w-full">
+
+				<!-- TOP METRICS ROW -->
+				<div class="grid grid-cols-2 md:grid-cols-4 gap-4" x-show="isAdmin">
+					<div class="bg-white border border-gray-300 p-4 flex items-center justify-between hover:border-blue-500 transition-colors">
+						<div class="space-y-1">
+							<span class="text-xs text-gray-500 font-mono tracking-wider uppercase block">ArangoDB Collections</span>
+							<span class="text-lg font-bold font-mono text-gray-900" x-text="images.length + ' docs'"></span>
+						</div>
+						<div class="h-10 w-10 border border-gray-300 flex items-center justify-center text-gray-600">
+							<i data-lucide="database" class="h-4 w-4"></i>
+						</div>
+					</div>
+
+					<div class="bg-white border border-gray-300 p-4 flex items-center justify-between hover:border-blue-500 transition-colors">
+						<div class="space-y-1">
+							<span class="text-xs text-gray-500 font-mono tracking-wider uppercase block">R2 Objects Cached</span>
+							<span class="text-lg font-bold font-mono text-gray-900" x-text="images.length + ' files'"></span>
+						</div>
+						<div class="h-10 w-10 border border-gray-300 flex items-center justify-center text-gray-600">
+							<i data-lucide="image" class="h-4 w-4"></i>
+						</div>
+					</div>
+
+					<div class="bg-white border border-gray-300 p-4 flex items-center justify-between hover:border-blue-500 transition-colors">
+						<div class="space-y-1">
+							<span class="text-xs text-gray-500 font-mono tracking-wider uppercase block">ArangoDB Queue</span>
+							<span class="text-lg font-bold font-mono text-gray-900" x-text="activeQueueCount + ' jobs'"></span>
+						</div>
+						<div class="h-10 w-10 border border-gray-300 flex items-center justify-center text-gray-600">
+							<i data-lucide="layers" class="h-4 w-4"></i>
+						</div>
+					</div>
+
+					<div class="bg-white border border-gray-300 p-4 flex items-center justify-between hover:border-blue-500 transition-colors">
+						<div class="space-y-1">
+							<span class="text-xs text-gray-500 font-mono tracking-wider uppercase block">Latest Match</span>
+							<span class="text-lg font-bold font-mono text-gray-900" x-text="testResult ? (testResult.similarity * 100).toFixed(1) + '%' : '—'"></span>
+						</div>
+						<div class="h-10 w-10 border border-gray-300 flex items-center justify-center text-gray-600">
+							<i data-lucide="zap" class="h-4 w-4"></i>
+						</div>
+					</div>
+				</div>
+
+				<!-- 1.b. Visual Step-by-Step Pipeline Tracker -->
+				<div class="bg-white border border-gray-300 p-6">
+					<h3 class="text-xs font-bold text-gray-900 mb-6 flex items-center gap-2">
+						<i data-lucide="layers" class="h-4 w-4 text-blue-500"></i>
+						Request Execution Flow (Step-by-Step Lifecycle)
+					</h3>
+
+					<div class="grid grid-cols-2 md:grid-cols-4 gap-4 relative">
+						<!-- Flow Line -->
+						<div class="hidden md:block absolute top-6 left-12 right-12 h-0.5 bg-gray-200 z-0"></div>
+
+						<!-- Step 1 -->
+						<div
+							class="p-4 border transition-colors z-10 flex flex-col items-center text-center relative"
+							:class="activeStep === 1 ? 'bg-white border-blue-500 text-blue-600 font-bold' : 'bg-white border-gray-200 text-gray-500'"
+						>
+							<div class="h-9 w-9 border flex items-center justify-center mb-3" :class="activeStep === 1 ? 'border-blue-500 text-blue-500' : 'border-gray-200 text-gray-400'">
+								<i data-lucide="server" class="h-4 w-4"></i>
+							</div>
+							<span class="text-xs font-semibold block mb-1" :class="activeStep === 1 ? 'text-blue-600' : 'text-gray-800'">1. Interception</span>
+							<p class="text-xs leading-relaxed text-gray-500" x-show="isAdmin">Parse URI parameters natively. Verify format, seed, & categorization.</p>
+							<span x-show="activeStep === 1" class="absolute top-1 right-1 flex h-2 w-2">
+								<span class="relative inline-flex h-2 w-2 bg-blue-500"></span>
+							</span>
+						</div>
+
+						<!-- Step 2 -->
+						<div
+							class="p-4 border transition-colors z-10 flex flex-col items-center text-center relative"
+							:class="activeStep === 2 ? 'bg-white border-blue-500 text-blue-600 font-bold' : 'bg-white border-gray-200 text-gray-500'"
+						>
+							<div class="h-9 w-9 border flex items-center justify-center mb-3" :class="activeStep === 2 ? 'border-blue-500 text-blue-500' : 'border-gray-200 text-gray-400'">
+								<i data-lucide="database" class="h-4 w-4"></i>
+							</div>
+							<span class="text-xs font-semibold block mb-1" :class="activeStep === 2 ? 'text-blue-600' : 'text-gray-800'">2. Vector Evaluation</span>
+							<p class="text-xs leading-relaxed text-gray-500" x-show="isAdmin">Formulate prompt vector via Worker AI. Query ArangoDB AQL cursor.</p>
+							<span x-show="activeStep === 2" class="absolute top-1 right-1 flex h-2 w-2">
+								<span class="relative inline-flex h-2 w-2 bg-blue-500"></span>
+							</span>
+						</div>
+
+						<!-- Step 3 -->
+						<div
+							class="p-4 border transition-colors z-10 flex flex-col items-center text-center relative"
+							:class="activeStep === 3 ? 'bg-white border-blue-500 text-blue-600 font-bold' : 'bg-white border-gray-200 text-gray-500'"
+						>
+							<div class="h-9 w-9 border flex items-center justify-center mb-3" :class="activeStep === 3 ? 'border-blue-500 text-blue-500' : 'border-gray-200 text-gray-400'">
+								<i data-lucide="cpu" class="h-4 w-4"></i>
+							</div>
+							<span class="text-xs font-semibold block mb-1" :class="activeStep === 3 ? 'text-blue-600' : 'text-gray-800'">3. Async Worker</span>
+							<p class="text-xs leading-relaxed text-gray-500" x-show="isAdmin">If Similarity &lt; 0.85, enqueue KV Job. Generate, upload R2, map vector.</p>
+							<span x-show="activeStep === 3" class="absolute top-1 right-1 flex h-2 w-2">
+								<span class="relative inline-flex h-2 w-2 bg-blue-500"></span>
+							</span>
+						</div>
+
+						<!-- Step 4 -->
+						<div
+							class="p-4 border transition-colors z-10 flex flex-col items-center text-center relative"
+							:class="activeStep === 4 ? 'bg-white border-blue-500 text-blue-600 font-bold' : 'bg-white border-gray-200 text-gray-500'"
+						>
+							<div class="h-9 w-9 border flex items-center justify-center mb-3" :class="activeStep === 4 ? 'border-blue-500 text-blue-500' : 'border-gray-200 text-gray-400'">
+								<i data-lucide="zap" class="h-4 w-4"></i>
+							</div>
+							<span class="text-xs font-semibold block mb-1" :class="activeStep === 4 ? 'text-blue-600' : 'text-gray-800'">4. Delivery & Edge</span>
+							<p class="text-xs leading-relaxed text-gray-500" x-show="isAdmin">Render Blurhash metadata OR 302 Redirect to optimized Cloudflare Image Resizing CDN.</p>
+							<span x-show="activeStep === 4" class="absolute top-1 right-1 flex h-2 w-2">
+								<span class="relative inline-flex h-2 w-2 bg-blue-500"></span>
+							</span>
+						</div>
+
+					</div>
+				</div>
+
+				<div class="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+
+					<!-- LEFT PANEL: MAIN CONTENT BASED ON ACTIVE TAB (8 columns) -->
+					<div class="space-y-8" :class="isAdmin ? 'lg:col-span-8' : 'col-span-12'">
+
+						<!-- TAB: SANDBOX -->
+						<div x-show="activeTab === 'sandbox'" class="space-y-8" x-transition>
+
+							<!-- 1. API Playground Controls -->
+							<section class="bg-white border border-gray-300 p-6 relative">
+								<div class="flex justify-between items-center mb-6 pb-2 border-b border-gray-200">
+									<h2 class="text-sm font-bold text-gray-900 flex items-center gap-2">
+										<i data-lucide="cpu" class="h-4 w-4 text-blue-500"></i>
+										Dynamic Request Sandbox
+									</h2>
+									<button
+										x-show="isAdmin"
+										@click="handleReset()"
+										class="text-xs text-gray-600 hover:text-red-500 flex items-center gap-1.5 bg-white border border-gray-300 hover:border-red-500 px-3 py-1.5 transition-colors cursor-pointer"
+									>
+										<i data-lucide="refresh-cw" class="h-3 w-3"></i>
+										Reseed Database
+									</button>
+								</div>
+
+								<div class="space-y-6">
+									<!-- Presets -->
+									<div>
+										<span class="text-xs font-semibold text-gray-600 block mb-2">Test Scenarios (Semantic Presets):</span>
+										<div class="flex flex-wrap gap-2">
+											<template x-for="(preset, i) in presets" :key="i">
+												<button
+													@click="text = preset.text; category = preset.cat"
+													class="px-3 py-1.5 text-xs font-medium border transition-colors flex items-center gap-1.5 cursor-pointer"
+													:class="text === preset.text ? 'bg-white border-blue-500 text-blue-600 font-bold' : 'bg-gray-50 text-gray-700 border-gray-300 hover:bg-gray-100 hover:text-gray-900'"
+												>
+													<i data-lucide="sparkles" class="h-3 w-3 text-blue-500"></i>
+													<span x-text="preset.label"></span>
+												</button>
+											</template>
+										</div>
+									</div>
+
+									<!-- Inputs Grid -->
+									<div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+
+										<!-- Genre Picker -->
+										<div class="md:col-span-2">
+											<label class="text-xs font-semibold text-gray-700 block mb-2">
+												Photography Genre <span class="text-xs text-gray-400 font-mono">(Auto-fills prompt + applies style template)</span>
+											</label>
+											<div class="relative">
+												<select
+													x-model="selectedGenre"
+													@change="applyGenre($event.target.value)"
+													class="w-full bg-white border border-gray-300 px-4 py-2.5 text-xs text-gray-900 focus:outline-none focus:border-blue-500 appearance-none pr-8"
+												>
+													<option value="">— Any genre (auto-detect from prompt) —</option>
+													<template x-for="g in genres" :key="g.slug">
+														<option :value="g.slug" x-text="g.slug.replace(/-/g,' ').replace(/\b\w/g,c=>c.toUpperCase())"></option>
+													</template>
+												</select>
+												<i data-lucide="chevron-down" class="absolute right-2.5 top-2.5 h-3.5 w-3.5 text-gray-400 pointer-events-none"></i>
+											</div>
+											<p class="text-xs text-gray-400 mt-1">106 genres — selecting one seeds the prompt and triggers its curated style template at generation time.</p>
+										</div>
+
+										<!-- Text/Semantic search -->
+										<div class="md:col-span-2">
+											<label class="text-xs font-semibold text-gray-700 block mb-2 flex justify-between">
+												<span>Semantic Prompt / Description <span class="text-xs text-blue-600 font-mono">(Triggers embedding pipeline)</span></span>
+												<span class="text-xs text-gray-400 font-normal">Optional</span>
+											</label>
+											<div class="relative">
+												<input
+													type="text"
+													x-model="text"
+													placeholder="Describe the image you want semantically (e.g. wet cyberpunk streets)..."
+													class="w-full bg-white border border-gray-300 px-4 py-3 text-xs text-gray-900 placeholder-gray-400 focus:outline-none focus:border-blue-500 pl-10"
+												/>
+												<i data-lucide="search" class="absolute left-3 top-3.5 h-4 w-4 text-gray-400"></i>
+											</div>
+										</div>
+
+										<!-- Category Selector -->
+										<div>
+											<label class="text-xs font-semibold text-gray-700 block mb-2">
+												Hard Filter Category <span class="text-xs text-gray-400 font-mono">(Fallback)</span>
+											</label>
+											<select
+												x-model="category"
+												class="w-full bg-white border border-gray-300 px-4 py-2.5 text-xs text-gray-900 focus:outline-none focus:border-blue-500"
+											>
+												<option value="nature">Nature</option>
+												<option value="urban">Urban</option>
+												<option value="space">Space</option>
+												<option value="architecture">Architecture</option>
+												<option value="animals">Animals</option>
+											</select>
+										</div>
+
+										<!-- Seed Selector -->
+										<div>
+											<label class="text-xs font-semibold text-gray-700 block mb-2">
+												Pseudo-Random Seed <span class="text-xs text-gray-400 font-mono">(Entropy)</span>
+											</label>
+											<input
+												type="number"
+												x-model.number="seed"
+												class="w-full bg-white border border-gray-300 px-4 py-2 text-xs font-mono focus:outline-none focus:border-blue-500"
+											/>
+										</div>
+
+										<!-- Format Selector -->
+										<div>
+											<label class="text-xs font-semibold text-gray-700 block mb-2">Output Delivery Format</label>
+											<div class="grid grid-cols-3 gap-2 bg-gray-50 p-1 border border-gray-300">
+												<template x-for="f in ['image', 'blurhash', 'lqip']">
+													<button
+														type="button"
+														@click="format = f"
+														class="py-1.5 text-xs uppercase font-mono font-semibold transition-colors cursor-pointer"
+														:class="format === f ? 'bg-blue-600 text-white border border-blue-600 font-bold' : 'text-gray-500 hover:text-gray-900'"
+														x-text="f"
+													></button>
+												</template>
+											</div>
+										</div>
+
+										<!-- Resolution parameters -->
+										<div>
+											<label class="text-xs font-semibold text-gray-700 block mb-2">Resolution (Dimensions)</label>
+											<div class="grid grid-cols-2 gap-2">
+												<div class="flex items-center bg-white border border-gray-300 px-3 py-1.5">
+													<span class="text-xs font-mono text-gray-400 mr-2">W</span>
+													<input
+														type="number"
+														x-model.number="width"
+														class="bg-transparent w-full focus:outline-none text-xs font-mono"
+													/>
+												</div>
+												<div class="flex items-center bg-white border border-gray-300 px-3 py-1.5">
+													<span class="text-xs font-mono text-gray-400 mr-2">H</span>
+													<input
+														type="number"
+														x-model.number="height"
+														class="bg-transparent w-full focus:outline-none text-xs font-mono"
+													/>
+												</div>
+											</div>
+
+											<!-- Resolution Presets -->
+											<div class="mt-2">
+												<span class="text-sm font-semibold text-gray-500 uppercase block mb-1">Quick Presets</span>
+												<div class="flex flex-wrap gap-1.5">
+													<button
+														type="button"
+														@click="width = 1920; height = 1080"
+														class="px-2 py-0.5 text-xs font-mono bg-gray-100 border border-gray-300 hover:border-blue-500 hover:bg-white text-gray-700 transition-colors cursor-pointer"
+													>
+														Desktop 1080p
+													</button>
+													<button
+														type="button"
+														@click="width = 2560; height = 1440"
+														class="px-2 py-0.5 text-xs font-mono bg-gray-100 border border-gray-300 hover:border-blue-500 hover:bg-white text-gray-700 transition-colors cursor-pointer"
+													>
+														1440p
+													</button>
+													<button
+														type="button"
+														@click="width = 3840; height = 2160"
+														class="px-2 py-0.5 text-xs font-mono bg-gray-100 border border-gray-300 hover:border-blue-500 hover:bg-white text-gray-700 transition-colors cursor-pointer"
+													>
+														4K
+													</button>
+													<button
+														type="button"
+														@click="width = 360; height = 800"
+														class="px-2 py-0.5 text-xs font-mono bg-gray-100 border border-gray-300 hover:border-blue-500 hover:bg-white text-gray-700 transition-colors cursor-pointer"
+													>
+														Mobile
+													</button>
+													<button
+														type="button"
+														@click="width = 768; height = 1024"
+														class="px-2 py-0.5 text-xs font-mono bg-gray-100 border border-gray-300 hover:border-blue-500 hover:bg-white text-gray-700 transition-colors cursor-pointer"
+													>
+														Tablet
+													</button>
+												</div>
+											</div>
+										</div>
+
+
+
+									</div>
+
+									<!-- Live URL preview -->
+									<div class="bg-gray-50 border border-gray-200 px-3 py-2 flex items-center gap-2">
+										<span class="text-xs font-bold text-blue-600 font-mono shrink-0">GET</span>
+										<code
+											class="text-xs text-gray-600 font-mono truncate flex-1"
+											x-text="`/api/cdn/${width}/${height}?` + new URLSearchParams(Object.fromEntries([['category',category],['seed',seed],['format',format],...(text ? [['text',text]] : [])])).toString()"
+										></code>
+									</div>
+
+									<!-- Request Action Button -->
+									<button
+										@click="executeApiCall()"
+										:disabled="loading"
+										class="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-gray-200 disabled:text-gray-400 disabled:cursor-not-allowed text-white py-3 px-4 text-xs font-semibold flex items-center justify-center gap-2 border border-blue-700 transition-colors cursor-pointer"
+									>
+										<span x-show="loading" class="flex items-center gap-2">
+											<i data-lucide="refresh-cw" class="h-4 w-4 animate-spin"></i>
+											Processing Edge Compute Pipelines...
+										</span>
+										<span x-show="!loading" class="flex items-center gap-2">
+											<i data-lucide="play" class="h-4 w-4 fill-current"></i>
+											Execute CDN GET Request
+										</span>
+									</button>
+
+								</div>
+							</section>
+
+
+
+							<!-- 3. API Response Output -->
+							<div x-show="testResult !== null" x-transition>
+
+								<!-- Full GET URL bar -->
+								<div class="bg-gray-900 border border-gray-700 px-4 py-2.5 flex items-center gap-2 min-w-0">
+									<span class="text-xs font-bold text-green-400 font-mono shrink-0">GET</span>
+									<code
+										class="flex-1 text-xs text-gray-100 font-mono break-all select-all leading-relaxed min-w-0"
+										x-text="testResult ? testResult.requestUrl : ''"
+									></code>
+									<button
+										x-data="{ copied: false }"
+										@click="navigator.clipboard.writeText(testResult.requestUrl).then(() => { copied = true; setTimeout(() => copied = false, 1500) })"
+										class="shrink-0 text-gray-400 hover:text-white transition-colors p-1.5 cursor-pointer"
+										title="Copy URL"
+									>
+										<i x-show="!copied" data-lucide="copy" class="h-3.5 w-3.5"></i>
+										<i x-show="copied" data-lucide="check" class="h-3.5 w-3.5 text-green-400"></i>
+									</button>
+									<a
+										:href="testResult ? testResult.requestUrl : '#'"
+										target="_blank"
+										rel="noreferrer"
+										class="shrink-0 text-gray-400 hover:text-white transition-colors p-1.5"
+										title="Open in new tab"
+									>
+										<i data-lucide="external-link" class="h-3.5 w-3.5"></i>
+									</a>
+								</div>
+
+								<!-- Response details -->
+								<div class="bg-white border border-gray-300 border-t-0 p-6">
+								<h3 class="text-xs font-bold text-gray-900 mb-4 flex items-center gap-2">
+									<i data-lucide="eye" class="h-4 w-4 text-green-600"></i>
+									Client-Side Delivery Response
+								</h3>
+
+								<div class="grid grid-cols-1 md:grid-cols-12 gap-6">
+
+									<!-- Left: Headers / Metadata -->
+									<div class="md:col-span-5 space-y-4 font-mono">
+										<div class="bg-gray-50 p-4 border border-gray-300 text-xs space-y-2">
+											<div class="flex justify-between border-b border-gray-200 pb-1.5 mb-1.5">
+												<span class="text-gray-500">HTTP Status</span>
+												<span class="font-bold" :class="testResult && testResult.status === 302 ? 'text-blue-600' : 'text-green-600'" x-text="testResult ? (testResult.status === 302 ? '302 Found (image redirect)' : '200 OK (JSON)') : ''"></span>
+											</div>
+											<div class="flex justify-between">
+												<span class="text-gray-500">Execution Time</span>
+												<span class="text-gray-950 font-semibold" x-text="testResult ? testResult.duration + ' ms' : ''"></span>
+											</div>
+											<div class="flex justify-between">
+												<span class="text-gray-500">X-Similarity-Score</span>
+												<span class="font-bold" :class="testResult && testResult.similarity >= 0.85 ? 'text-green-600' : 'text-yellow-600'" x-text="testResult ? testResult.similarity.toFixed(4) : ''"></span>
+											</div>
+											<div class="flex justify-between">
+												<span class="text-gray-500">X-Async-Generated</span>
+												<span class="font-bold" :class="testResult && testResult.isAsync ? 'text-yellow-600' : 'text-gray-500'" x-text="testResult ? (testResult.isAsync ? 'TRUE (Queued)' : 'FALSE') : ''"></span>
+											</div>
+											<div class="flex justify-between" x-show="testResult && testResult.genre">
+												<span class="text-gray-500">X-Genre</span>
+												<span class="font-bold text-purple-600 font-mono text-xs" x-text="testResult ? testResult.genre : ''"></span>
+											</div>
+											<div class="flex-col pt-1 border-t border-gray-200 mt-1.5">
+												<span class="text-gray-500 block mb-1">Cache-Control</span>
+												<span class="text-gray-900 break-all" x-text="testResult ? testResult.cacheControl : ''"></span>
+											</div>
+										</div>
+
+										<!-- Match details card -->
+										<div class="bg-white p-4 border border-gray-300 text-xs">
+											<span class="text-gray-600 font-semibold block mb-2">Evaluated Match Document</span>
+											<div class="space-y-1.5" x-show="testResult">
+												<p class="text-gray-950 font-medium" x-text="testResult && testResult.matchedImage ? '&quot;' + testResult.matchedImage.text + '&quot;' : '(no match loaded — authenticate to inspect)'"></p>
+												<div class="flex gap-2 text-xs font-mono">
+													<span class="px-2 py-0.5 border border-gray-200 text-gray-600" x-text="testResult && testResult.matchedImage ? 'ID: ' + testResult.matchedImage._key : 'ID: —'"></span>
+													<span class="px-2 py-0.5 border border-gray-200 text-gray-600" x-text="testResult && testResult.matchedImage ? 'Category: ' + testResult.matchedImage.category : 'Category: —'"></span>
+												</div>
+											</div>
+										</div>
+									</div>
+
+									<!-- Right: Render / Image view -->
+									<div class="md:col-span-7 flex flex-col justify-center">
+										<div class="aspect-video w-full bg-white border border-gray-300 relative overflow-hidden flex items-center justify-center">
+
+											<!-- Blurhash Display -->
+											<div x-show="format === 'blurhash'" class="absolute inset-0 flex flex-col items-center justify-center p-4">
+												<!-- Canvas: shown only when real blurhash returned -->
+												<template x-if="testResult && testResult.blurhash">
+													<div class="w-full h-full max-h-40 relative overflow-hidden border border-gray-300">
+														<canvas id="blurhash-canvas" class="w-full h-full object-cover rounded-lg filter blur-md"></canvas>
+													</div>
+												</template>
+												<!-- Source image preview as fallback when no blurhash computed -->
+												<template x-if="testResult && !testResult.blurhash">
+													<div class="w-full h-full max-h-40 relative overflow-hidden border border-gray-300">
+														<img :src="testResult.url" class="w-full h-full object-cover filter blur-sm" referrerpolicy="no-referrer" alt="source" />
+													</div>
+												</template>
+												<div class="mt-3 text-center space-y-1 w-full">
+													<template x-if="testResult && testResult.blurhash">
+														<div>
+															<span class="text-xs text-gray-500 font-mono">Decoded Blurhash (32x32 DCT grid)</span>
+															<p class="text-xs font-mono text-blue-600 bg-gray-50 border border-gray-300 px-3 py-1 select-all break-all max-w-full" x-text="testResult.blurhash"></p>
+														</div>
+													</template>
+													<template x-if="testResult && !testResult.blurhash">
+														<p class="text-xs font-mono text-gray-400">Blurhash not yet computed — showing source image preview. Similarity: <span class="text-blue-600 font-bold" x-text="testResult.similarity.toFixed(4)"></span></p>
+													</template>
+												</div>
+											</div>
+
+											<!-- LQIP Display -->
+											<div x-show="format === 'lqip'" class="relative w-full h-full">
+												<img
+													:src="testResult ? testResult.url : ''"
+													alt="LQIP"
+													class="w-full h-full object-cover filter blur-md opacity-90 scale-105"
+													referrerpolicy="no-referrer"
+												/>
+												<div class="absolute inset-0 bg-white/50 flex items-center justify-center">
+													<div class="text-center bg-white border border-gray-300 p-3">
+														<span class="text-xs font-mono text-yellow-600 block mb-1">Serving Low-Quality Placeholder</span>
+														<span class="text-xs text-gray-500 font-mono" x-text="testResult ? '302 Location: ' + testResult.url.slice(0, 45) + '...' : ''"></span>
+													</div>
+												</div>
+											</div>
+
+											<!-- Standard Image Display -->
+											<div x-show="format === 'image'" class="relative w-full h-full">
+												<img
+													:src="testResult ? testResult.url : ''"
+													alt="CDN Response"
+													class="w-full h-full object-cover transition-opacity duration-300"
+													referrerpolicy="no-referrer"
+												/>
+											</div>
+
+											<!-- Top Badge: Similarity status -->
+											<div class="absolute top-3 right-3 flex items-center gap-1.5 bg-white border border-gray-300 px-3 py-1.5 shadow-sm">
+												<span class="relative flex h-1.5 w-1.5">
+													<span class="animate-ping absolute inline-flex h-full w-full opacity-75" :class="testResult && testResult.similarity >= 0.85 ? 'bg-green-400' : 'bg-yellow-400'"></span>
+													<span class="relative inline-flex h-1.5 w-1.5" :class="testResult && testResult.similarity >= 0.85 ? 'bg-green-500' : 'bg-yellow-500'"></span>
+												</span>
+												<span class="text-xs font-bold text-gray-800" x-text="testResult && testResult.similarity >= 0.85 ? 'EXACT MATCH READY' : 'BACKGROUND GENERATION TRIGGERED'"></span>
+											</div>
+
+										</div>
+
+										<!-- External link to raw CDN URL -->
+										<a
+											:href="testResult ? testResult.url : '#'"
+											target="_blank"
+											rel="noreferrer"
+											class="mt-3 text-xs text-blue-600 hover:text-blue-800 font-mono flex items-center gap-1.5 self-end hover:underline cursor-pointer"
+										>
+											<span x-text="format === 'blurhash' ? 'Open Source Image URL' : 'Open Raw CDN URL (follows redirect)'"></span>
+											<i data-lucide="external-link" class="h-3 w-3"></i>
+										</a>
+									</div>
+
+								</div>
+								</div><!-- end response details -->
+							</div><!-- end result wrapper -->
+
+						</div>
+
+						<!-- TAB: DATABASE / VECTOR STORE -->
+						<div x-show="activeTab === 'database'" class="space-y-6" x-transition>
+							<!-- Auth lock -->
+							<template x-if="!isAdmin">
+								<div class="bg-white border border-gray-300 p-12 flex flex-col items-center justify-center gap-4 text-center">
+									<i data-lucide="lock" class="h-10 w-10 text-gray-400"></i>
+									<h3 class="text-sm font-bold text-gray-700">Admin Access Required</h3>
+								</div>
+							</template>
+							<div x-show="isAdmin" class="bg-white border border-gray-300 p-6">
+								<!-- Header info -->
+								<div class="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6 pb-4 border-b border-gray-300">
+									<div>
+										<h2 class="text-sm font-bold text-gray-900 flex items-center gap-2">
+											<i data-lucide="database" class="h-4 w-4 text-blue-500"></i>
+											ArangoDB: Images Collection Vector Storage
+										</h2>
+										<p class="text-xs text-gray-500">Stores image metadata along with 128-dimensional dense vectors (using gemini-embedding-2)</p>
+									</div>
+									<button
+										@click="handleReset()"
+										class="text-xs text-gray-600 hover:text-blue-600 flex items-center gap-1.5 bg-white border border-gray-300 px-3 py-1.5 transition-colors cursor-pointer"
+									>
+										<i data-lucide="refresh-cw" class="h-3 w-3"></i>
+										Reset Collection
+									</button>
+								</div>
+
+								<!-- Filter Pills with count badges -->
+								<div class="flex flex-wrap gap-2 mb-6">
+									<template x-for="catFilter in ['all', 'nature', 'urban', 'space', 'architecture', 'animals']">
+										<button
+											@click="dbCategoryFilter = catFilter"
+											class="px-3 py-1.5 text-xs font-mono font-semibold border transition-colors flex items-center gap-2 cursor-pointer"
+											:class="dbCategoryFilter === catFilter ? 'bg-white text-blue-600 border-blue-500 font-bold' : 'bg-gray-50 text-gray-600 border-gray-300 hover:bg-gray-100 hover:text-gray-900'"
+										>
+											<span class="capitalize" x-text="catFilter"></span>
+											<span class="text-xs px-1.5 py-0.2 font-bold" :class="dbCategoryFilter === catFilter ? 'border border-blue-500 text-blue-500' : 'bg-gray-200 text-gray-600'" x-text="catFilter === 'all' ? images.length : images.filter(img => img.category.toLowerCase() === catFilter.toLowerCase()).length"></span>
+										</button>
+									</template>
+								</div>
+
+								<!-- Split Layout: Left Table Data Grid, Right Inspector Panel -->
+								<div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+
+									<!-- Left: Interactive Data Grid (7 columns) -->
+									<div class="lg:col-span-7 space-y-3">
+										<div class="text-xs font-mono font-bold text-gray-500 px-2 flex items-center justify-between">
+											<span>SELECT A RECORD TO INSPECT VECTORS</span>
+											<span x-text="'Showing ' + filteredImages.length + ' docs'"></span>
+										</div>
+
+										<div class="bg-white border border-gray-300 overflow-hidden">
+											<!-- Table Headers -->
+											<div class="grid grid-cols-12 gap-2 px-4 py-2 bg-gray-50 border-b border-gray-300 text-xs font-mono text-gray-500 uppercase font-semibold">
+												<div class="col-span-3">Key / ID</div>
+												<div class="col-span-2">Preview</div>
+												<div class="col-span-5">Prompt Context</div>
+												<div class="col-span-2 text-right">Seed</div>
+											</div>
+
+											<!-- Table Rows -->
+											<div class="divide-y divide-gray-200 max-h-96 overflow-y-auto">
+												<template x-for="img in filteredImages" :key="img._key">
+													<button
+														@click="selectedDbImageKey = img._key"
+														class="w-full text-left grid grid-cols-12 gap-2 px-4 py-3 items-center hover:bg-gray-50 transition-colors cursor-pointer"
+														:class="selectedDbImageKey === img._key ? 'border-l-4 border-blue-500 pl-3' : 'pl-4'"
+													>
+														<!-- Document Key -->
+														<div class="col-span-3 font-mono text-xs truncate text-gray-600 font-medium">
+															<span :class="selectedDbImageKey === img._key ? 'text-blue-600 font-bold' : ''" x-text="img._key"></span>
+														</div>
+
+														<!-- Thumbnail Preview -->
+														<div class="col-span-2">
+															<div class="h-8 w-8 bg-gray-100 overflow-hidden border border-gray-300">
+																<img :src="img.sourceUrl" class="w-full h-full object-cover" alt="" referrerpolicy="no-referrer" />
+															</div>
+														</div>
+
+														<!-- Prompt Description -->
+														<div class="col-span-5 pr-2">
+															<p class="text-xs text-gray-800 font-medium truncate" x-text="img.text"></p>
+															<span class="text-xs uppercase font-mono text-gray-400 font-semibold" x-text="img.category"></span>
+														</div>
+
+														<!-- Seed -->
+														<div class="col-span-2 text-right font-mono text-xs text-gray-600" x-text="img.seed"></div>
+													</button>
+												</template>
+
+												<div x-show="filteredImages.length === 0" class="p-8 text-center font-mono text-xs text-gray-500 italic">
+													No records found matching this category.
+												</div>
+											</div>
+										</div>
+									</div>
+
+									<!-- Right: Vector Inspector Detail Panel (5 columns) -->
+									<div class="lg:col-span-5">
+										<div x-show="selectedDoc === undefined" class="bg-gray-50 border border-gray-300 p-6 text-center text-gray-500 italic font-mono text-xs">
+											Seeding or loading documents...
+										</div>
+
+										<div x-show="selectedDoc !== undefined" class="bg-white border border-gray-300 p-4 space-y-4">
+											<div class="flex items-center justify-between pb-2 border-b border-gray-200 text-xs font-mono">
+												<span class="text-gray-700 flex items-center gap-1.5 font-bold">
+													<span class="h-1.5 w-1.5 bg-blue-500"></span>
+													Vector Inspector
+												</span>
+												<span class="text-xs text-gray-500" x-text="'_key: ' + (selectedDoc ? selectedDoc._key : '')"></span>
+											</div>
+
+											<!-- Large Image Preview -->
+											<div class="aspect-video w-full bg-gray-50 border border-gray-300 overflow-hidden relative">
+												<img :src="selectedDoc ? selectedDoc.sourceUrl : ''" class="w-full h-full object-cover" alt="" referrerpolicy="no-referrer" />
+												<div class="absolute bottom-2 left-2 px-2 py-0.5 bg-white border border-gray-300 text-xs uppercase font-mono text-gray-700 font-semibold" x-text="'Category: ' + (selectedDoc ? selectedDoc.category : '')"></div>
+											</div>
+
+											<!-- Prompt and Seed Details -->
+											<div class="space-y-1">
+												<span class="text-xs font-mono uppercase text-gray-400 font-bold tracking-wider">Semantic Prompt</span>
+												<p class="text-xs font-semibold text-gray-950" x-text="selectedDoc ? '&quot;' + selectedDoc.text + '&quot;' : ''"></p>
+												<div class="flex items-center gap-4 text-xs text-gray-500 font-mono pt-1">
+													<span>Seed: <strong class="text-gray-700 font-bold" x-text="selectedDoc ? selectedDoc.seed : ''"></strong></span>
+													<span>Storage: <span class="text-gray-600 font-semibold">Cloudflare R2</span></span>
+												</div>
+											</div>
+
+											<!-- Interactive Embeddings Visualizer -->
+											<div class="space-y-2 pt-2 border-t border-gray-200">
+												<span class="text-xs font-mono uppercase text-blue-600 font-bold tracking-wider block">Dense Embeddings Index (10-dim Vector)</span>
+
+												<div class="space-y-1.5">
+													<template x-for="(label, idx) in semanticLabels">
+														<div class="flex items-center gap-2 text-xs font-mono">
+															<span class="w-20 text-gray-500 truncate text-left" x-text="label"></span>
+
+															<!-- Horizontal progress bar -->
+															<div class="flex-1 bg-gray-100 h-2.5 overflow-hidden border border-gray-200 relative">
+																<div
+																	class="bg-blue-600 h-full transition-all duration-300"
+																	:style="selectedDoc ? 'width: ' + Math.min(100, selectedDoc.embedding[idx] * 100) + '%' : 'width: 0%'"
+																></div>
+															</div>
+
+															<span class="w-8 text-right font-bold text-blue-600" x-text="selectedDoc ? selectedDoc.embedding[idx].toFixed(2) : '0.00'"></span>
+														</div>
+													</template>
+												</div>
+											</div>
+
+											<!-- Quick load button -->
+											<button
+												@click="text = selectedDoc.text; category = selectedDoc.category.toLowerCase(); seed = selectedDoc.seed; activeTab = 'sandbox'"
+												class="w-full mt-2 bg-white hover:bg-gray-100 text-blue-600 border border-blue-600 text-xs font-semibold py-2 px-3 flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+											>
+												<i data-lucide="play" class="h-3.5 w-3.5 fill-current"></i>
+												Load Into Sandbox Playground
+											</button>
+										</div>
+									</div>
+
+								</div>
+
+							</div>
+						</div><!-- end database tab -->
+
+						<!-- TAB: ARANGODB QUEUES -->
+						<div x-show="activeTab === 'queue'" class="space-y-6" x-transition>
+							<template x-if="!isAdmin">
+								<div class="bg-white border border-gray-300 p-12 flex flex-col items-center justify-center gap-4 text-center">
+									<i data-lucide="lock" class="h-10 w-10 text-gray-400"></i>
+									<h3 class="text-sm font-bold text-gray-700">Admin Access Required</h3>
+									<p class="text-xs text-gray-500 max-w-sm">Append <code class="bg-gray-100 text-blue-600 px-1 font-mono">?key=ADMIN_KEY</code> to the URL to authenticate this session.</p>
+								</div>
+							</template>
+							<div x-show="isAdmin" class="bg-white border border-gray-300 p-6">
+								<h2 class="text-sm font-bold text-gray-900 mb-2 flex items-center gap-2">
+									<i data-lucide="layers" class="h-4 w-4 text-blue-500"></i>
+									ArangoDB: Native DB-Backed Queue Engine
+								</h2>
+								<p class="text-xs text-gray-500 mb-6">
+									A high-performance database-backed queue processing engine. Triggers direct Gemini image generation and optimizes resolutions dynamically when similarity drops below 0.85.
+								</p>
+
+								<div x-show="queue.length === 0" class="bg-gray-50 border border-gray-300 p-8 text-center text-gray-500 space-y-2">
+									<i data-lucide="layers" class="h-8 w-8 text-gray-400 mx-auto"></i>
+									<p class="text-xs font-semibold text-gray-700">Queue is currently empty</p>
+									<p class="text-xs">Execute a semantic request in the playground with a low similarity match to trigger background tasks!</p>
+								</div>
+
+								<div x-show="queue.length > 0" class="space-y-4">
+									<template x-for="job in queue" :key="job.id">
+										<div class="bg-white border border-gray-300 p-4 space-y-3">
+											<div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs">
+												<div class="flex items-center gap-2">
+													<span class="text-xs font-mono px-2 py-0.5 border border-blue-500 text-blue-600 font-semibold uppercase" x-text="job.id"></span>
+													<span class="text-gray-600">Prompt: <strong class="text-gray-900" x-text="'&quot;' + job.prompt + '&quot;'"></strong></span>
+												</div>
+												<div class="flex items-center gap-3">
+													<span class="text-xs text-gray-500 font-mono font-normal" x-text="'Enqueued: ' + job.createdAt"></span>
+													<span class="text-xs font-semibold uppercase px-2 py-0.5 border"
+														:class="job.status === 'completed' ? 'border-green-500 text-green-600' : (job.status === 'processing' ? 'border-blue-500 text-blue-600' : 'border-gray-300 text-gray-500')"
+														x-text="job.status"
+													></span>
+												</div>
+											</div>
+
+											<!-- Live Progress Bar -->
+											<div class="space-y-1">
+												<div class="flex justify-between text-xs text-gray-500">
+													<span x-text="
+														job.status === 'pending' ? 'Waiting for worker thread...' :
+														job.status === 'failed' ? 'Job failed' :
+														job.status === 'completed' ? 'Completed — image indexed in ArangoDB' :
+														job.progress <= 5 ? 'Worker picked up job...' :
+														job.progress <= 25 ? 'Fetching base image + computing embedding vector...' :
+														'Generating image via provider chain, resizing variants...'
+													"></span>
+													<span x-text="job.progress + '%'"></span>
+												</div>
+												<div class="w-full bg-gray-100 h-2 overflow-hidden border border-gray-300">
+													<div
+														class="bg-blue-600 h-full transition-all duration-300"
+														:style="'width: ' + job.progress + '%'"
+													></div>
+												</div>
+											</div>
+
+										</div>
+									</template>
+								</div>
+
+							</div>
+						</div><!-- end queue tab -->
+
+						<!-- TAB: SRCSET & ASYNC -->
+						<div x-show="activeTab === 'srcset'" class="space-y-6" x-transition>
+							<div class="bg-white border border-gray-300 p-6 space-y-6">
+								<div>
+									<h2 class="text-sm font-bold text-gray-900 flex items-center gap-2">
+										<i data-lucide="layout" class="h-4 w-4 text-purple-500"></i>
+										srcset Endpoint &amp; Respond-Async
+									</h2>
+									<p class="text-xs text-gray-500 mt-1">
+										<code class="bg-gray-100 text-purple-600 px-1 font-mono">GET /api/cdn/srcset</code> returns a ready-to-use <code class="bg-gray-100 text-blue-600 px-1 font-mono">srcset</code> payload for native browser lazy loading.
+										Add <code class="bg-gray-100 text-orange-600 px-1 font-mono">Prefer: respond-async</code> header to get a non-blocking 202 response with a poll URL.
+									</p>
+								</div>
+
+								<!-- srcset tester -->
+								<div class="space-y-3">
+									<h3 class="text-xs font-bold text-gray-800 uppercase tracking-wider font-mono border-b border-gray-200 pb-1.5 flex items-center gap-1.5">
+										<span class="h-2 w-2 bg-purple-500"></span>
+										srcset Tester
+									</h3>
+									<div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+										<div class="md:col-span-2">
+											<label class="text-xs font-semibold text-gray-700 block mb-1">Text Query</label>
+											<input type="text" x-model="srcsetText" placeholder="e.g. misty mountain at dawn"
+												class="w-full bg-white border border-gray-300 px-3 py-2 text-xs font-mono text-gray-900 focus:outline-none focus:border-purple-500" />
+										</div>
+										<div>
+											<label class="text-xs font-semibold text-gray-700 block mb-1">Output Format</label>
+											<select x-model="srcsetOutput" class="w-full bg-white border border-gray-300 px-3 py-2 text-xs font-mono text-gray-900 focus:outline-none focus:border-purple-500">
+												<option value="webp">webp</option>
+												<option value="jpg">jpg</option>
+												<option value="png">png</option>
+											</select>
+										</div>
+									</div>
+									<div class="flex items-center gap-4">
+										<label class="flex items-center gap-2 text-xs font-semibold text-gray-700 cursor-pointer">
+											<input type="checkbox" x-model="srcsetAsync" class="h-3 w-3 rounded border-gray-300 text-orange-500" />
+											<span>Send <code class="bg-orange-50 text-orange-600 px-1 font-mono border border-orange-200">Prefer: respond-async</code></span>
+										</label>
+										<button @click="executeSrcset()"
+											class="bg-purple-600 hover:bg-purple-700 text-white font-semibold py-2 px-5 border border-purple-700 transition-colors cursor-pointer text-xs flex items-center gap-2">
+											<i data-lucide="send" class="h-3.5 w-3.5"></i>
+											Execute
+										</button>
+									</div>
+								</div>
+
+								<!-- srcset result -->
+								<div x-show="srcsetResult" class="space-y-4">
+									<h3 class="text-xs font-bold text-gray-800 uppercase tracking-wider font-mono border-b border-gray-200 pb-1.5 flex items-center gap-1.5">
+										<span class="h-2 w-2 bg-green-500"></span>
+										Response
+									</h3>
+
+									<!-- Status badge -->
+									<div class="flex items-center gap-3">
+										<span class="text-xs font-mono px-2 py-0.5 border font-bold"
+											:class="srcsetResult?.status === 202 ? 'border-orange-400 text-orange-600 bg-orange-50' : 'border-green-500 text-green-700 bg-green-50'"
+											x-text="srcsetResult?.status === 202 ? '202 Accepted (async)' : '200 OK'"></span>
+										<span x-show="srcsetResult?.similarity" class="text-xs text-gray-500 font-mono">
+											similarity: <span class="font-bold text-gray-800" x-text="srcsetResult?.similarity?.toFixed ? srcsetResult.similarity.toFixed(4) : srcsetResult?.similarity"></span>
+										</span>
+										<span x-show="srcsetResult?.status === 202" class="text-xs text-orange-600 font-mono flex items-center gap-1">
+											<i data-lucide="clock" class="h-3 w-3"></i>
+											Polling every 3s...
+										</span>
+									</div>
+
+									<!-- Preview image -->
+									<div x-show="srcsetResult?.src" class="flex gap-4 items-start">
+										<div class="border border-gray-200 overflow-hidden bg-gray-100 flex-shrink-0" style="width:120px;height:80px">
+											<img :src="srcsetResult?.src" :alt="srcsetResult?.alt"
+												class="w-full h-full object-cover"
+												loading="lazy" />
+										</div>
+										<div class="flex-1 min-w-0">
+											<p class="text-xs text-gray-500 mb-1">Default <code class="font-mono">src</code></p>
+											<p class="text-xs font-mono text-blue-700 break-all" x-text="srcsetResult?.src"></p>
+											<p class="text-xs text-gray-500 mt-2 mb-1">Key / Format</p>
+											<p class="text-xs font-mono text-gray-800" x-text="`${srcsetResult?.key} · ${srcsetResult?.format}`"></p>
+										</div>
+									</div>
+
+									<!-- srcset value -->
+									<div x-show="srcsetResult?.srcset">
+										<p class="text-xs font-semibold text-gray-700 mb-1">srcset <span class="font-normal text-gray-400" x-text="`(${srcsetResult?.srcset?.split(',').length || 0} breakpoints)`"></span></p>
+										<pre class="bg-gray-900 text-green-400 text-xs p-3 overflow-x-auto font-mono leading-relaxed rounded-none whitespace-pre-wrap break-all" x-text="srcsetResult?.srcset?.split(',').join(',\n')"></pre>
+									</div>
+
+									<!-- sizes -->
+									<div x-show="srcsetResult?.sizes">
+										<p class="text-xs font-semibold text-gray-700 mb-1">sizes</p>
+										<code class="bg-gray-100 text-gray-800 text-xs px-2 py-1 font-mono block" x-text="srcsetResult?.sizes"></code>
+									</div>
+
+									<!-- HTML snippet -->
+									<div x-show="srcsetResult?.src">
+										<p class="text-xs font-semibold text-gray-700 mb-1">Ready-to-use HTML</p>
+										<pre class="bg-gray-900 text-yellow-300 text-xs p-3 overflow-x-auto font-mono rounded-none whitespace-pre-wrap" x-text="buildImgTag()"></pre>
+									</div>
+
+									<!-- Async polling result -->
+									<div x-show="srcsetResult?.status === 202" class="bg-orange-50 border border-orange-200 p-3 text-xs text-orange-800 space-y-1">
+										<p class="font-semibold flex items-center gap-1"><i data-lucide="clock" class="h-3.5 w-3.5"></i> Async Job: <span x-text="srcsetResult?.jobId" class="font-mono"></span></p>
+										<p>Poll URL: <code class="font-mono text-orange-700 break-all" x-text="srcsetPollUrl"></code></p>
+										<p class="text-gray-500">Fallback image served while generating. Result auto-updates when ready.</p>
+									</div>
+								</div>
+
+								<!-- Reference code -->
+								<div class="space-y-3 border-t border-gray-200 pt-4">
+									<h3 class="text-xs font-bold text-gray-800 uppercase tracking-wider font-mono pb-1 flex items-center gap-1.5">
+										<span class="h-2 w-2 bg-blue-500"></span>
+										Integration Examples
+									</h3>
+									<pre class="bg-gray-900 text-gray-300 text-xs p-4 overflow-x-auto font-mono leading-relaxed rounded-none"><!-- Instant srcset (blocking) -->
 fetch('/api/cdn/srcset?text=sunset+beach&output=webp')
-  .then(r => r.json())
-  .then(({ src, srcset, sizes, alt }) => {
-    img.src = src;
-    img.srcset = srcset;
-    img.sizes = sizes;
-    img.alt = alt;
-    img.loading = 'lazy';
-  });
+	.then(r => r.json())
+	.then(({ src, srcset, sizes, alt }) => {
+		img.src = src;
+		img.srcset = srcset;
+		img.sizes = sizes;
+		img.alt = alt;
+		img.loading = 'lazy';
+	});
 
 <!-- Async (non-blocking, polls until ready) -->
 const res = await fetch('/api/cdn/srcset?text=sunset+beach', {
-  headers: { 'Prefer': 'respond-async' }
+	headers: { 'Prefer': 'respond-async' }
 });
 if (res.status === 202) {
-  const { jobId, fallback } = await res.json();
-  const pollUrl = res.headers.get('Location');
-  // Show fallback image immediately
-  img.src = fallback.src;
-  // Poll for real result
-  const poll = setInterval(async () => {
-    const r = await fetch(pollUrl);
-    if (r.status === 200) {
-      const data = await r.json();
-      img.srcset = data.srcset;
-      img.src = data.src;
-      clearInterval(poll);
-    }
-  }, 3000);
+	const { jobId, fallback } = await res.json();
+	const pollUrl = res.headers.get('Location');
+	// Show fallback image immediately
+	img.src = fallback.src;
+	// Poll for real result
+	const poll = setInterval(async () => {
+		const r = await fetch(pollUrl);
+		if (r.status === 200) {
+			const data = await r.json();
+			img.srcset = data.srcset;
+			img.src = data.src;
+			clearInterval(poll);
+		}
+	}, 3000);
 }</pre>
-                </div>
-              </div>
-            </div>
+								</div>
+							</div>
+						</div>
 
-            <!-- TAB: SYSTEM SETTINGS -->
-            <div x-show="activeTab === 'settings'" class="space-y-6" x-transition>
-              <template x-if="!isAdmin">
-                <div class="bg-white border border-gray-300 p-12 flex flex-col items-center justify-center gap-4 text-center">
-                  <i data-lucide="lock" class="h-10 w-10 text-gray-400"></i>
-                  <h3 class="text-sm font-bold text-gray-700">Admin Access Required</h3>
-                  <p class="text-xs text-gray-500 max-w-sm">Append <code class="bg-gray-100 text-blue-600 px-1 font-mono">?key=ADMIN_KEY</code> to the URL to authenticate this session.</p>
-                </div>
-              </template>
-              <div x-show="isAdmin" class="bg-white border border-gray-300 p-6 space-y-6">
-                <div>
-                  <h2 class="text-sm font-bold text-gray-900 flex items-center gap-2">
-                    <i data-lucide="settings" class="h-4 w-4 text-blue-500"></i>
-                    System Configuration Store
-                  </h2>
-                  <p class="text-xs text-gray-500 mt-1">
-                    Manage third-party integrations and storage engines. All variables below are fetched from and stored directly in the ArangoDB <code class="bg-gray-100 text-blue-600 px-1 font-mono">Settings</code> collection.
-                  </p>
-                </div>
+						<!-- TAB: SYSTEM SETTINGS -->
+						<div x-show="activeTab === 'settings'" class="space-y-6" x-transition>
+							<template x-if="!isAdmin">
+								<div class="bg-white border border-gray-300 p-12 flex flex-col items-center justify-center gap-4 text-center">
+									<i data-lucide="lock" class="h-10 w-10 text-gray-400"></i>
+									<h3 class="text-sm font-bold text-gray-700">Admin Access Required</h3>
+									<p class="text-xs text-gray-500 max-w-sm">Append <code class="bg-gray-100 text-blue-600 px-1 font-mono">?key=ADMIN_KEY</code> to the URL to authenticate this session.</p>
+								</div>
+							</template>
+							<div x-show="isAdmin" class="bg-white border border-gray-300 p-6 space-y-6">
+								<div>
+									<h2 class="text-sm font-bold text-gray-900 flex items-center gap-2">
+										<i data-lucide="settings" class="h-4 w-4 text-blue-500"></i>
+										System Configuration Store
+									</h2>
+									<p class="text-xs text-gray-500 mt-1">
+										Manage third-party integrations and storage engines. All variables below are fetched from and stored directly in the ArangoDB <code class="bg-gray-100 text-blue-600 px-1 font-mono">Settings</code> collection.
+									</p>
+								</div>
 
-                <form @submit.prevent="saveSettings()" class="space-y-6">
-                  
-                  <!-- Section: Vector Embeddings -->
-                  <div class="space-y-4">
-                    <h3 class="text-xs font-bold text-gray-800 uppercase tracking-wider font-mono border-b border-gray-200 pb-1.5 flex items-center gap-1.5">
-                      <span class="h-2 w-2 bg-blue-500"></span>
-                      Semantic Embedding Engine
-                    </h3>
-                    <div>
-                      <label class="text-xs font-semibold text-gray-700 block mb-1">Gemini API Key</label>
-                      <input
-                        type="password"
-                        x-model="settings.geminiApiKey"
-                        placeholder="AIzaSy... (Input your Gemini key here)"
-                        class="w-full bg-white border border-gray-300 px-3 py-2 text-xs font-mono text-gray-900 focus:outline-none focus:border-blue-500"
-                      />
-                      <p class="text-xs text-gray-400 mt-1">Used to extract unit-length dense 128-dimensional semantic vectors using the state-of-the-art gemini-embedding-2 model.</p>
-                    </div>
-                  </div>
+								<form @submit.prevent="saveSettings()" class="space-y-6">
 
-                  <!-- Section: Image Generator -->
-                  <div class="space-y-4">
-                    <h3 class="text-xs font-bold text-gray-800 uppercase tracking-wider font-mono border-b border-gray-200 pb-1.5 flex items-center gap-1.5">
-                      <span class="h-2 w-2 bg-purple-500"></span>
-                      On-Demand Text-to-Image Generation
-                    </h3>
-                    <p class="text-xs text-gray-400">Provider fallback chain: <span class="font-mono text-gray-600">Gemini → Cloudflare AI → Pollinations.ai (free) → HuggingFace → source image</span></p>
+									<!-- Section: Vector Embeddings -->
+									<div class="space-y-4">
+										<h3 class="text-xs font-bold text-gray-800 uppercase tracking-wider font-mono border-b border-gray-200 pb-1.5 flex items-center gap-1.5">
+											<span class="h-2 w-2 bg-blue-500"></span>
+											Semantic Embedding Engine
+										</h3>
+										<div>
+											<label class="text-xs font-semibold text-gray-700 block mb-1">Gemini API Key</label>
+											<input
+												type="password"
+												x-model="settings.geminiApiKey"
+												placeholder="AIzaSy... (Input your Gemini key here)"
+												class="w-full bg-white border border-gray-300 px-3 py-2 text-xs font-mono text-gray-900 focus:outline-none focus:border-blue-500"
+											/>
+											<p class="text-xs text-gray-400 mt-1">Used to extract unit-length dense 128-dimensional semantic vectors using the state-of-the-art gemini-embedding-2 model.</p>
+										</div>
+									</div>
 
-                    <!-- Gemini Image (shared key with embeddings) -->
-                    <div>
-                      <label class="text-xs font-semibold text-gray-700 block mb-1">Gemini API Key <span class="text-gray-400 font-normal">(shared with embedding)</span></label>
-                      <input
-                        type="password"
-                        x-model="settings.geminiApiKey"
-                        placeholder="AIzaSy... (provider #1)"
-                        class="w-full bg-white border border-gray-300 px-3 py-2 text-xs font-mono text-gray-900 focus:outline-none focus:border-blue-500"
-                      />
-                      <p class="text-xs text-gray-400 mt-1">Uses <code class="bg-gray-100 text-blue-600 px-1 font-mono">gemini-2.5-flash-image</code> for image generation.</p>
-                    </div>
+									<!-- Section: Image Generator -->
+									<div class="space-y-4">
+										<h3 class="text-xs font-bold text-gray-800 uppercase tracking-wider font-mono border-b border-gray-200 pb-1.5 flex items-center gap-1.5">
+											<span class="h-2 w-2 bg-purple-500"></span>
+											On-Demand Text-to-Image Generation
+										</h3>
+										<p class="text-xs text-gray-400">Provider fallback chain: <span class="font-mono text-gray-600">Gemini → Cloudflare AI → Pollinations.ai (free) → HuggingFace → source image</span></p>
 
-                    <!-- Cloudflare Workers AI -->
-                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div>
-                        <label class="text-xs font-semibold text-gray-700 block mb-1">Cloudflare Account ID <span class="text-gray-400 font-normal">(provider #2)</span></label>
-                        <input
-                          type="text"
-                          x-model="settings.cfAccountId"
-                          placeholder="abc123... (your CF account ID)"
-                          class="w-full bg-white border border-gray-300 px-3 py-2 text-xs font-mono text-gray-900 focus:outline-none focus:border-blue-500"
-                        />
-                      </div>
-                      <div>
-                        <label class="text-xs font-semibold text-gray-700 block mb-1">Cloudflare AI API Token</label>
-                        <input
-                          type="password"
-                          x-model="settings.cfApiToken"
-                          placeholder="cf_... (Workers AI token)"
-                          class="w-full bg-white border border-gray-300 px-3 py-2 text-xs font-mono text-gray-900 focus:outline-none focus:border-blue-500"
-                        />
-                      </div>
-                    </div>
-                    <p class="text-xs text-gray-400">Uses <code class="bg-gray-100 text-blue-600 px-1 font-mono">stable-diffusion-xl-lightning</code> → <code class="bg-gray-100 text-blue-600 px-1 font-mono">stable-diffusion-xl-base-1.0</code>.</p>
+										<!-- Gemini Image (shared key with embeddings) -->
+										<div>
+											<label class="text-xs font-semibold text-gray-700 block mb-1">Gemini API Key <span class="text-gray-400 font-normal">(shared with embedding)</span></label>
+											<input
+												type="password"
+												x-model="settings.geminiApiKey"
+												placeholder="AIzaSy... (provider #1)"
+												class="w-full bg-white border border-gray-300 px-3 py-2 text-xs font-mono text-gray-900 focus:outline-none focus:border-blue-500"
+											/>
+											<p class="text-xs text-gray-400 mt-1">Uses <code class="bg-gray-100 text-blue-600 px-1 font-mono">gemini-2.5-flash-image</code> for image generation.</p>
+										</div>
 
-                    <!-- HuggingFace -->
-                    <div>
-                      <label class="text-xs font-semibold text-gray-700 block mb-1">HuggingFace API Token <span class="text-gray-400 font-normal">(provider #4 — optional, improves rate limits)</span></label>
-                      <input
-                        type="password"
-                        x-model="settings.hfApiToken"
-                        placeholder="hf_... (leave empty for free anonymous tier)"
-                        class="w-full bg-white border border-gray-300 px-3 py-2 text-xs font-mono text-gray-900 focus:outline-none focus:border-blue-500"
-                      />
-                      <p class="text-xs text-gray-400 mt-1">Uses <code class="bg-gray-100 text-blue-600 px-1 font-mono">FLUX.1-schnell</code> → <code class="bg-gray-100 text-blue-600 px-1 font-mono">stable-diffusion-xl-base-1.0</code>. Pollinations.ai (#3) is always free with no key.</p>
-                    </div>
+										<!-- Cloudflare Workers AI -->
+										<div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+											<div>
+												<label class="text-xs font-semibold text-gray-700 block mb-1">Cloudflare Account ID <span class="text-gray-400 font-normal">(provider #2)</span></label>
+												<input
+													type="text"
+													x-model="settings.cfAccountId"
+													placeholder="abc123... (your CF account ID)"
+													class="w-full bg-white border border-gray-300 px-3 py-2 text-xs font-mono text-gray-900 focus:outline-none focus:border-blue-500"
+												/>
+											</div>
+											<div>
+												<label class="text-xs font-semibold text-gray-700 block mb-1">Cloudflare AI API Token</label>
+												<input
+													type="password"
+													x-model="settings.cfApiToken"
+													placeholder="cf_... (Workers AI token)"
+													class="w-full bg-white border border-gray-300 px-3 py-2 text-xs font-mono text-gray-900 focus:outline-none focus:border-blue-500"
+												/>
+											</div>
+										</div>
+										<p class="text-xs text-gray-400">Uses <code class="bg-gray-100 text-blue-600 px-1 font-mono">stable-diffusion-xl-lightning</code> → <code class="bg-gray-100 text-blue-600 px-1 font-mono">stable-diffusion-xl-base-1.0</code>.</p>
 
-                    <!-- Replicate (placeholder) -->
-                    <div>
-                      <label class="text-xs font-semibold text-gray-700 block mb-1">Replicate API Token <span class="text-gray-400 font-normal">(placeholder)</span></label>
-                      <input
-                        type="password"
-                        x-model="settings.replicateApiToken"
-                        placeholder="r8_... (not yet wired into chain)"
-                        class="w-full bg-gray-50 border border-dashed border-gray-300 px-3 py-2 text-xs font-mono text-gray-400 focus:outline-none focus:border-blue-500"
-                      />
-                    </div>
-                  </div>
+										<!-- HuggingFace -->
+										<div>
+											<label class="text-xs font-semibold text-gray-700 block mb-1">HuggingFace API Token <span class="text-gray-400 font-normal">(provider #4 — optional, improves rate limits)</span></label>
+											<input
+												type="password"
+												x-model="settings.hfApiToken"
+												placeholder="hf_... (leave empty for free anonymous tier)"
+												class="w-full bg-white border border-gray-300 px-3 py-2 text-xs font-mono text-gray-900 focus:outline-none focus:border-blue-500"
+											/>
+											<p class="text-xs text-gray-400 mt-1">Uses <code class="bg-gray-100 text-blue-600 px-1 font-mono">FLUX.1-schnell</code> → <code class="bg-gray-100 text-blue-600 px-1 font-mono">stable-diffusion-xl-base-1.0</code>. Pollinations.ai (#3) is always free with no key.</p>
+										</div>
 
-                  <!-- Section: Fallback Image Providers -->
-                  <div class="space-y-4">
-                    <h3 class="text-xs font-bold text-gray-800 uppercase tracking-wider font-mono border-b border-gray-200 pb-1.5 flex items-center gap-1.5">
-                      <span class="h-2 w-2 bg-green-500"></span>
-                      Fallback Image Providers
-                    </h3>
-                    <p class="text-xs text-gray-400">Used when no matching image exists in the database. Chain order: Pexels → Unsplash → static.photos → Picsum → classic seeds.</p>
+										<!-- Replicate (placeholder) -->
+										<div>
+											<label class="text-xs font-semibold text-gray-700 block mb-1">Replicate API Token <span class="text-gray-400 font-normal">(placeholder)</span></label>
+											<input
+												type="password"
+												x-model="settings.replicateApiToken"
+												placeholder="r8_... (not yet wired into chain)"
+												class="w-full bg-gray-50 border border-dashed border-gray-300 px-3 py-2 text-xs font-mono text-gray-400 focus:outline-none focus:border-blue-500"
+											/>
+										</div>
+									</div>
 
-                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div>
-                        <label class="text-xs font-semibold text-gray-700 block mb-1">Pexels API Key <span class="text-gray-400 font-normal">(optional)</span></label>
-                        <input
-                          type="password"
-                          x-model="settings.pexelsApiKey"
-                          placeholder="Leave empty to skip Pexels"
-                          class="w-full bg-white border border-gray-300 px-3 py-2 text-xs font-mono text-gray-900 focus:outline-none focus:border-blue-500"
-                        />
-                        <p class="text-xs text-gray-400 mt-1">Free tier: 200 req/hr. <a href="https://www.pexels.com/api/" target="_blank" class="text-blue-500 hover:underline">Get key ↗</a></p>
-                      </div>
-                      <div>
-                        <label class="text-xs font-semibold text-gray-700 block mb-1">Unsplash Access Key <span class="text-gray-400 font-normal">(optional)</span></label>
-                        <input
-                          type="password"
-                          x-model="settings.unsplashAccessKey"
-                          placeholder="Leave empty to skip Unsplash"
-                          class="w-full bg-white border border-gray-300 px-3 py-2 text-xs font-mono text-gray-900 focus:outline-none focus:border-blue-500"
-                        />
-                        <p class="text-xs text-gray-400 mt-1">Free tier: 50 req/hr. <a href="https://unsplash.com/developers" target="_blank" class="text-blue-500 hover:underline">Get key ↗</a></p>
-                      </div>
-                      <div>
-                        <label class="text-xs font-semibold text-gray-700 block mb-1">Wallhaven API Key <span class="text-gray-400 font-normal">(optional)</span></label>
-                        <input
-                          type="password"
-                          x-model="settings.wallhavenApiKey"
-                          placeholder="Leave empty to skip Wallhaven"
-                          class="w-full bg-white border border-gray-300 px-3 py-2 text-xs font-mono text-gray-900 focus:outline-none focus:border-blue-500"
-                        />
-                        <p class="text-xs text-gray-400 mt-1">High-res wallpapers. <a href="https://wallhaven.cc/settings/account" target="_blank" class="text-blue-500 hover:underline">Get key ↗</a></p>
-                      </div>
-                      <div>
-                        <label class="text-xs font-semibold text-gray-700 block mb-1">Pixabay API Key <span class="text-gray-400 font-normal">(optional — daily indexer)</span></label>
-                        <input
-                          type="password"
-                          x-model="settings.pixabayApiKey"
-                          placeholder="Leave empty to skip Pixabay"
-                          class="w-full bg-white border border-gray-300 px-3 py-2 text-xs font-mono text-gray-900 focus:outline-none focus:border-blue-500"
-                        />
-                        <p class="text-xs text-gray-400 mt-1">Editors-choice photos. Free tier: 100 req/min. <a href="https://pixabay.com/api/docs/" target="_blank" class="text-blue-500 hover:underline">Get key ↗</a></p>
-                      </div>
-                      <div>
-                        <label class="text-xs font-semibold text-gray-700 block mb-1">Openverse Client ID <span class="text-gray-400 font-normal">(fallback + daily indexer)</span></label>
-                        <input
-                          type="text"
-                          x-model="settings.openverseClientId"
-                          placeholder="Openverse OAuth2 client_id"
-                          class="w-full bg-white border border-gray-300 px-3 py-2 text-xs font-mono text-gray-900 focus:outline-none focus:border-blue-500"
-                        />
-                      </div>
-                      <div>
-                        <label class="text-xs font-semibold text-gray-700 block mb-1">Openverse Client Secret <span class="text-gray-400 font-normal">(fallback + daily indexer)</span></label>
-                        <input
-                          type="password"
-                          x-model="settings.openverseClientSecret"
-                          placeholder="Openverse OAuth2 client_secret"
-                          class="w-full bg-white border border-gray-300 px-3 py-2 text-xs font-mono text-gray-900 focus:outline-none focus:border-blue-500"
-                        />
-                        <p class="text-xs text-gray-400 mt-1">Open-licensed media (CC, PDM). Indexes 5 genre queries per run. <a href="https://api.openverse.org/v1/#tag/auth" target="_blank" class="text-blue-500 hover:underline">Register ↗</a></p>
-                      </div>
-                    </div>
-                  </div>
+									<!-- Section: Fallback Image Providers -->
+									<div class="space-y-4">
+										<h3 class="text-xs font-bold text-gray-800 uppercase tracking-wider font-mono border-b border-gray-200 pb-1.5 flex items-center gap-1.5">
+											<span class="h-2 w-2 bg-green-500"></span>
+											Fallback Image Providers
+										</h3>
+										<p class="text-xs text-gray-400">Used when no matching image exists in the database. Chain order: Pexels → Unsplash → static.photos → Picsum → classic seeds.</p>
 
-                  <!-- Section: Storage Bucket -->
-                  <div class="space-y-4">
-                    <h3 class="text-xs font-bold text-gray-800 uppercase tracking-wider font-mono border-b border-gray-200 pb-1.5 flex items-center gap-1.5">
-                      <span class="h-2 w-2 bg-blue-500"></span>
-                      Cloudflare R2 Object Storage
-                    </h3>
-                    
-                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div>
-                        <label class="text-xs font-semibold text-gray-700 block mb-1">R2 Access Key ID</label>
-                        <input
-                          type="text"
-                          x-model="settings.r2AccessKeyId"
-                          placeholder="e3b0c442... (Input your Access Key ID here)"
-                          class="w-full bg-white border border-gray-300 px-3 py-2 text-xs font-mono text-gray-900 focus:outline-none focus:border-blue-500"
-                        />
-                      </div>
-                      <div>
-                        <label class="text-xs font-semibold text-gray-700 block mb-1">R2 Secret Access Key</label>
-                        <input
-                          type="password"
-                          x-model="settings.r2SecretAccessKey"
-                          placeholder="2b823... (Input your Secret Access Key here)"
-                          class="w-full bg-white border border-gray-300 px-3 py-2 text-xs font-mono text-gray-900 focus:outline-none focus:border-blue-500"
-                        />
-                      </div>
-                      <div>
-                        <label class="text-xs font-semibold text-gray-700 block mb-1">R2 Bucket Name</label>
-                        <input
-                          type="text"
-                          x-model="settings.r2BucketName"
-                          placeholder="my-photos-cdn-bucket (Name of your R2 Bucket)"
-                          class="w-full bg-white border border-gray-300 px-3 py-2 text-xs font-mono text-gray-900 focus:outline-none focus:border-blue-500"
-                        />
-                      </div>
-                      <div>
-                        <label class="text-xs font-semibold text-gray-700 block mb-1">R2 Storage Endpoint</label>
-                        <input
-                          type="text"
-                          x-model="settings.r2Endpoint"
-                          placeholder="https://<account-id>.r2.cloudflarestorage.com"
-                          class="w-full bg-white border border-gray-300 px-3 py-2 text-xs font-mono text-gray-900 focus:outline-none focus:border-blue-500"
-                        />
-                      </div>
-                      <div class="md:col-span-2">
-                        <label class="text-xs font-semibold text-gray-700 block mb-1">Custom CDN Domain <span class="text-gray-400 font-normal">(public URL served to clients)</span></label>
-                        <input
-                          type="text"
-                          x-model="settings.cdnDomain"
-                          placeholder="https://photos.newsrss.org"
-                          class="w-full bg-white border border-gray-300 px-3 py-2 text-xs font-mono text-gray-900 focus:outline-none focus:border-blue-500"
-                        />
-                        <p class="text-xs text-gray-400 mt-1">Public domain mapped to your R2 bucket. Uploaded variants are served as <code class="bg-gray-100 text-blue-600 px-1 font-mono">{cdnDomain}/{resolution}/{key}.jpg</code>.</p>
-                      </div>
-                    </div>
-                    <p class="text-xs text-gray-400 mt-1">Used to sign dynamic image uploads on Edge CDN nodes using AWS SigV4 chunked signing algorithms.</p>
-                  </div>
+										<div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+											<div>
+												<label class="text-xs font-semibold text-gray-700 block mb-1">Pexels API Key <span class="text-gray-400 font-normal">(optional)</span></label>
+												<input
+													type="password"
+													x-model="settings.pexelsApiKey"
+													placeholder="Leave empty to skip Pexels"
+													class="w-full bg-white border border-gray-300 px-3 py-2 text-xs font-mono text-gray-900 focus:outline-none focus:border-blue-500"
+												/>
+												<p class="text-xs text-gray-400 mt-1">Free tier: 200 req/hr. <a href="https://www.pexels.com/api/" target="_blank" class="text-blue-500 hover:underline">Get key ↗</a></p>
+											</div>
+											<div>
+												<label class="text-xs font-semibold text-gray-700 block mb-1">Unsplash Access Key <span class="text-gray-400 font-normal">(optional)</span></label>
+												<input
+													type="password"
+													x-model="settings.unsplashAccessKey"
+													placeholder="Leave empty to skip Unsplash"
+													class="w-full bg-white border border-gray-300 px-3 py-2 text-xs font-mono text-gray-900 focus:outline-none focus:border-blue-500"
+												/>
+												<p class="text-xs text-gray-400 mt-1">Free tier: 50 req/hr. <a href="https://unsplash.com/developers" target="_blank" class="text-blue-500 hover:underline">Get key ↗</a></p>
+											</div>
+											<div>
+												<label class="text-xs font-semibold text-gray-700 block mb-1">Wallhaven API Key <span class="text-gray-400 font-normal">(optional)</span></label>
+												<input
+													type="password"
+													x-model="settings.wallhavenApiKey"
+													placeholder="Leave empty to skip Wallhaven"
+													class="w-full bg-white border border-gray-300 px-3 py-2 text-xs font-mono text-gray-900 focus:outline-none focus:border-blue-500"
+												/>
+												<p class="text-xs text-gray-400 mt-1">High-res wallpapers. <a href="https://wallhaven.cc/settings/account" target="_blank" class="text-blue-500 hover:underline">Get key ↗</a></p>
+											</div>
+											<div>
+												<label class="text-xs font-semibold text-gray-700 block mb-1">Pixabay API Key <span class="text-gray-400 font-normal">(optional — daily indexer)</span></label>
+												<input
+													type="password"
+													x-model="settings.pixabayApiKey"
+													placeholder="Leave empty to skip Pixabay"
+													class="w-full bg-white border border-gray-300 px-3 py-2 text-xs font-mono text-gray-900 focus:outline-none focus:border-blue-500"
+												/>
+												<p class="text-xs text-gray-400 mt-1">Editors-choice photos. Free tier: 100 req/min. <a href="https://pixabay.com/api/docs/" target="_blank" class="text-blue-500 hover:underline">Get key ↗</a></p>
+											</div>
+											<div>
+												<label class="text-xs font-semibold text-gray-700 block mb-1">Openverse Client ID <span class="text-gray-400 font-normal">(fallback + daily indexer)</span></label>
+												<input
+													type="text"
+													x-model="settings.openverseClientId"
+													placeholder="Openverse OAuth2 client_id"
+													class="w-full bg-white border border-gray-300 px-3 py-2 text-xs font-mono text-gray-900 focus:outline-none focus:border-blue-500"
+												/>
+											</div>
+											<div>
+												<label class="text-xs font-semibold text-gray-700 block mb-1">Openverse Client Secret <span class="text-gray-400 font-normal">(fallback + daily indexer)</span></label>
+												<input
+													type="password"
+													x-model="settings.openverseClientSecret"
+													placeholder="Openverse OAuth2 client_secret"
+													class="w-full bg-white border border-gray-300 px-3 py-2 text-xs font-mono text-gray-900 focus:outline-none focus:border-blue-500"
+												/>
+												<p class="text-xs text-gray-400 mt-1">Open-licensed media (CC, PDM). Indexes 5 genre queries per run. <a href="https://api.openverse.org/v1/#tag/auth" target="_blank" class="text-blue-500 hover:underline">Register ↗</a></p>
+											</div>
+										</div>
+									</div>
 
-                  <!-- Submit button -->
-                  <div class="pt-4 border-t border-gray-200 flex items-center justify-between">
-                    <span x-show="settingsSavedMessage" class="text-xs text-green-600 font-semibold flex items-center gap-1">
-                      <i data-lucide="check" class="h-4 w-4"></i>
-                      Settings persisted successfully in ArangoDB!
-                    </span>
-                    <span x-show="!settingsSavedMessage"></span>
-                    
-                    <button
-                      type="submit"
-                      class="bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 px-6 border border-blue-700 transition-colors cursor-pointer text-xs"
-                    >
-                      Save Configuration
-                    </button>
-                  </div>
+									<!-- Section: Storage Bucket -->
+									<div class="space-y-4">
+										<h3 class="text-xs font-bold text-gray-800 uppercase tracking-wider font-mono border-b border-gray-200 pb-1.5 flex items-center gap-1.5">
+											<span class="h-2 w-2 bg-blue-500"></span>
+											Cloudflare R2 Object Storage
+										</h3>
 
-                </form>
-              </div>
-            </div>
+										<div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+											<div>
+												<label class="text-xs font-semibold text-gray-700 block mb-1">R2 Access Key ID</label>
+												<input
+													type="text"
+													x-model="settings.r2AccessKeyId"
+													placeholder="e3b0c442... (Input your Access Key ID here)"
+													class="w-full bg-white border border-gray-300 px-3 py-2 text-xs font-mono text-gray-900 focus:outline-none focus:border-blue-500"
+												/>
+											</div>
+											<div>
+												<label class="text-xs font-semibold text-gray-700 block mb-1">R2 Secret Access Key</label>
+												<input
+													type="password"
+													x-model="settings.r2SecretAccessKey"
+													placeholder="2b823... (Input your Secret Access Key here)"
+													class="w-full bg-white border border-gray-300 px-3 py-2 text-xs font-mono text-gray-900 focus:outline-none focus:border-blue-500"
+												/>
+											</div>
+											<div>
+												<label class="text-xs font-semibold text-gray-700 block mb-1">R2 Bucket Name</label>
+												<input
+													type="text"
+													x-model="settings.r2BucketName"
+													placeholder="my-photos-cdn-bucket (Name of your R2 Bucket)"
+													class="w-full bg-white border border-gray-300 px-3 py-2 text-xs font-mono text-gray-900 focus:outline-none focus:border-blue-500"
+												/>
+											</div>
+											<div>
+												<label class="text-xs font-semibold text-gray-700 block mb-1">R2 Storage Endpoint</label>
+												<input
+													type="text"
+													x-model="settings.r2Endpoint"
+													placeholder="https://<account-id>.r2.cloudflarestorage.com"
+													class="w-full bg-white border border-gray-300 px-3 py-2 text-xs font-mono text-gray-900 focus:outline-none focus:border-blue-500"
+												/>
+											</div>
+											<div class="md:col-span-2">
+												<label class="text-xs font-semibold text-gray-700 block mb-1">Custom CDN Domain <span class="text-gray-400 font-normal">(public URL served to clients)</span></label>
+												<input
+													type="text"
+													x-model="settings.cdnDomain"
+													placeholder="https://photos.newsrss.org"
+													class="w-full bg-white border border-gray-300 px-3 py-2 text-xs font-mono text-gray-900 focus:outline-none focus:border-blue-500"
+												/>
+												<p class="text-xs text-gray-400 mt-1">Public domain mapped to your R2 bucket. Uploaded variants are served as <code class="bg-gray-100 text-blue-600 px-1 font-mono">{cdnDomain}/{resolution}/{key}.jpg</code>.</p>
+											</div>
+										</div>
+										<p class="text-xs text-gray-400 mt-1">Used to sign dynamic image uploads on Edge CDN nodes using AWS SigV4 chunked signing algorithms.</p>
+									</div>
 
-          </div>
+									<!-- Submit button -->
+									<div class="pt-4 border-t border-gray-200 flex items-center justify-between">
+										<span x-show="settingsSavedMessage" class="text-xs text-green-600 font-semibold flex items-center gap-1">
+											<i data-lucide="check" class="h-4 w-4"></i>
+											Settings persisted successfully in ArangoDB!
+										</span>
+										<span x-show="!settingsSavedMessage"></span>
 
-          <!-- RIGHT PANEL: SYSTEM TERMINAL LOGS & METRICS (4 columns) -->
-          <div class="lg:col-span-4 space-y-6">
-            
-            <!-- 1.a. Status Console panel -->
-            <div class="hidden bg-white border border-gray-300 p-5 font-mono text-xs">
-              <h3 class="text-xs font-bold text-gray-900 mb-4 pb-2 border-b border-gray-300 flex items-center justify-between">
-                <span class="flex items-center gap-1.5">
-                  <i data-lucide="server" class="h-3.5 w-3.5 text-blue-500"></i>
-                  System Architecture
-                </span>
-                <span class="text-xs text-green-600 flex items-center gap-1">
-                  <span class="h-1.5 w-1.5 bg-green-500 rounded-full inline-block"></span>
-                  ONLINE
-                </span>
-              </h3>
+										<button
+											type="submit"
+											class="bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 px-6 border border-blue-700 transition-colors cursor-pointer text-xs"
+										>
+											Save Configuration
+										</button>
+									</div>
 
-              <div class="space-y-4">
-                <div class="flex justify-between items-center bg-gray-50 p-2.5 border border-gray-200">
-                  <span class="text-gray-500">Database (Vector)</span>
-                  <span class="text-xs text-blue-600 border border-blue-500 px-2 py-0.5 font-bold">
-                    ArangoDB AQL
-                  </span>
-                </div>
-                <div class="flex justify-between items-center bg-gray-50 p-2.5 border border-gray-200">
-                  <span class="text-gray-500">File Bucket Store</span>
-                  <span class="text-xs text-blue-600 border border-blue-500 px-2 py-0.5 font-bold">
-                    Cloudflare R2
-                  </span>
-                </div>
-                <div class="flex justify-between items-center bg-gray-50 p-2.5 border border-gray-200">
-                  <span class="text-gray-500">Embedding Engine</span>
-                  <span class="text-xs text-blue-600 border border-blue-500 px-2 py-0.5 font-bold">
-                    CF Workers AI
-                  </span>
-                </div>
-                <div class="flex justify-between items-center bg-gray-50 p-2.5 border border-gray-200">
-                  <span class="text-gray-500">Job Queue Manager</span>
-                  <span class="text-xs text-blue-600 border border-blue-500 px-2 py-0.5 font-bold">
-                    ArangoDB Collection
-                  </span>
-                </div>
-              </div>
-            </div>
+								</form>
+							</div>
+						</div>
 
-            <!-- 2. System Log Stream -->
-            <div class="bg-white border border-gray-300 p-5 font-mono flex flex-col max-h-screen">
-              <div class="flex items-center justify-between mb-4 pb-2 border-b border-gray-300">
-                <h3 class="text-xs font-bold text-gray-900 flex items-center gap-1.5">
-                  <i data-lucide="terminal" class="h-3.5 w-3.5 text-blue-500"></i>
-                  Live Output Logs
-                </h3>
-                <span class="text-xs text-gray-500 font-normal" x-show="isAdmin">Auto-scrolling</span>
-                <span class="text-xs text-gray-400 font-mono flex items-center gap-1" x-show="!isAdmin">
-                  <i data-lucide="lock" class="h-3 w-3"></i> locked
-                </span>
-              </div>
+					</div>
 
-              <div class="flex-1 overflow-y-auto space-y-2.5 pr-2 text-xs select-text">
-                <div x-show="!isAdmin" class="text-gray-400 italic h-full flex flex-col items-center justify-center text-center p-4 gap-2">
-                  <i data-lucide="lock" class="h-6 w-6 text-gray-300"></i>
-                  <span>Authenticate to view logs</span>
-                </div>
-                <div x-show="isAdmin && logs.length === 0" class="text-gray-500 italic h-full flex items-center justify-center text-center p-4">
-                  Waiting for pipeline requests...
-                </div>
-                <template x-if="isAdmin">
-                  <div>
-                    <template x-for="log in logs" :key="log.id">
-                      <div class="border-b border-gray-200 pb-2 hover:bg-gray-50 transition-colors">
-                        <div class="flex items-center justify-between text-xs text-gray-500 mb-0.5">
-                          <span x-text="'[' + log.timestamp + ']'"></span>
-                          <span class="font-bold uppercase tracking-wider text-xs"
-                            :class="log.type === 'api' ? 'text-green-600' : (log.type === 'queue' ? 'text-yellow-600' : 'text-gray-500')"
-                            x-text="log.type"
-                          ></span>
-                        </div>
-                        <p class="text-gray-800 leading-relaxed break-all text-xs" x-text="log.message"></p>
-                      </div>
-                    </template>
-                  </div>
-                </template>
-              </div>
-            </div>
+					<!-- RIGHT PANEL: SYSTEM TERMINAL LOGS & METRICS (4 columns) -->
+					<div class="lg:col-span-4 space-y-6" x-show="isAdmin">
 
-          </div>
+						<!-- 1.a. Status Console panel -->
+						<div class="hidden bg-white border border-gray-300 p-5 font-mono text-xs">
+							<h3 class="text-xs font-bold text-gray-900 mb-4 pb-2 border-b border-gray-300 flex items-center justify-between">
+								<span class="flex items-center gap-1.5">
+									<i data-lucide="server" class="h-3.5 w-3.5 text-blue-500"></i>
+									System Architecture
+								</span>
+								<span class="text-xs text-green-600 flex items-center gap-1">
+									<span class="h-1.5 w-1.5 bg-green-500 rounded-full inline-block"></span>
+									ONLINE
+								</span>
+							</h3>
 
-        </div>
-      </main>
+							<div class="space-y-4">
+								<div class="flex justify-between items-center bg-gray-50 p-2.5 border border-gray-200">
+									<span class="text-gray-500">Database (Vector)</span>
+									<span class="text-xs text-blue-600 border border-blue-500 px-2 py-0.5 font-bold">
+										ArangoDB AQL
+									</span>
+								</div>
+								<div class="flex justify-between items-center bg-gray-50 p-2.5 border border-gray-200">
+									<span class="text-gray-500">File Bucket Store</span>
+									<span class="text-xs text-blue-600 border border-blue-500 px-2 py-0.5 font-bold">
+										Cloudflare R2
+									</span>
+								</div>
+								<div class="flex justify-between items-center bg-gray-50 p-2.5 border border-gray-200">
+									<span class="text-gray-500">Embedding Engine</span>
+									<span class="text-xs text-blue-600 border border-blue-500 px-2 py-0.5 font-bold">
+										CF Workers AI
+									</span>
+								</div>
+								<div class="flex justify-between items-center bg-gray-50 p-2.5 border border-gray-200">
+									<span class="text-gray-500">Job Queue Manager</span>
+									<span class="text-xs text-blue-600 border border-blue-500 px-2 py-0.5 font-bold">
+										ArangoDB Collection
+									</span>
+								</div>
+							</div>
+						</div>
 
-    </div>
+						<!-- 2. System Log Stream -->
+						<div class="bg-white border border-gray-300 p-5 font-mono flex flex-col max-h-screen">
+							<div class="flex items-center justify-between mb-4 pb-2 border-b border-gray-300">
+								<h3 class="text-xs font-bold text-gray-900 flex items-center gap-1.5">
+									<i data-lucide="terminal" class="h-3.5 w-3.5 text-blue-500"></i>
+									Live Output Logs
+								</h3>
+								<span class="text-xs text-gray-500 font-normal" x-show="isAdmin">Auto-scrolling</span>
+								<span class="text-xs text-gray-400 font-mono flex items-center gap-1" x-show="!isAdmin">
+									<i data-lucide="lock" class="h-3 w-3"></i> locked
+								</span>
+							</div>
 
-    <!-- Footer -->
-    <footer class="border-t border-gray-200 bg-white py-6 px-6 mt-auto">
-      <div class="max-w-7xl mx-auto flex flex-col md:flex-row items-center justify-between gap-3 text-xs text-gray-500">
-        <div class="flex items-center gap-2">
-          <i data-lucide="zap" class="h-3.5 w-3.5 text-gray-400"></i>
-          <span>Photos CDN — AI-Powered Image Delivery Platform</span>
-        </div>
-        <div class="flex items-center gap-4">
-          <a href="/about.html" class="hover:text-gray-900 transition-colors font-medium">About</a>
-          <a href="/privacy.html" class="hover:text-gray-900 transition-colors">Privacy Policy</a>
-          <a href="/terms.html" class="hover:text-gray-900 transition-colors">Terms of Service</a>
-        </div>
-      </div>
-    </footer>
+							<div class="flex-1 overflow-y-auto space-y-2.5 pr-2 text-xs select-text">
+								<div x-show="!isAdmin" class="text-gray-400 italic h-full flex flex-col items-center justify-center text-center p-4 gap-2">
+									<i data-lucide="lock" class="h-6 w-6 text-gray-300"></i>
+									<span>Authenticate to view logs</span>
+								</div>
+								<div x-show="isAdmin && logs.length === 0" class="text-gray-500 italic h-full flex items-center justify-center text-center p-4">
+									Waiting for pipeline requests...
+								</div>
+								<template x-if="isAdmin">
+									<div>
+										<template x-for="log in logs" :key="log.id">
+											<div class="border-b border-gray-200 pb-2 hover:bg-gray-50 transition-colors">
+												<div class="flex items-center justify-between text-xs text-gray-500 mb-0.5">
+													<span x-text="'[' + log.timestamp + ']'"></span>
+													<span class="font-bold uppercase tracking-wider text-xs"
+														:class="log.type === 'api' ? 'text-green-600' : (log.type === 'queue' ? 'text-yellow-600' : 'text-gray-500')"
+														x-text="log.type"
+													></span>
+												</div>
+												<p class="text-gray-800 leading-relaxed break-all text-xs" x-text="log.message"></p>
+											</div>
+										</template>
+									</div>
+								</template>
+							</div>
+						</div>
 
-    <!-- Application script -->
-    <script src="/src/main.js"></script>
-  </body>
+					</div>
+
+				</div>
+			</main>
+
+		</div>
+
+		<!-- Footer -->
+		<footer class="border-t border-gray-200 bg-white py-6 px-6 mt-auto">
+			<div class="max-w-7xl mx-auto flex flex-col md:flex-row items-center justify-between gap-3 text-xs text-gray-500">
+				<div class="flex items-center gap-2">
+					<i data-lucide="zap" class="h-3.5 w-3.5 text-gray-400"></i>
+					<span>Photos CDN — AI-Powered Image Delivery Platform</span>
+				</div>
+				<div class="flex items-center gap-4">
+					<a href="/about.html" class="hover:text-gray-900 transition-colors font-medium">About</a>
+					<a href="/privacy.html" class="hover:text-gray-900 transition-colors">Privacy Policy</a>
+					<a href="/terms.html" class="hover:text-gray-900 transition-colors">Terms of Service</a>
+				</div>
+			</div>
+		</footer>
+
+		<!-- Application script -->
+		<script src="/src/main.js"></script>
+	</body>
 </html>
