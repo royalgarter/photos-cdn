@@ -9,6 +9,7 @@ import { PexelsProvider } from "./providers/pexels.ts";
 import { UnsplashProvider } from "./providers/unsplash.ts";
 import { PicsumProvider } from "./providers/picsum.ts";
 import { WallhavenProvider } from "./providers/wallhaven.ts";
+import { OpenverseProvider } from "./providers/openverse.ts";
 import type { FallbackProvider } from "./providers/types.ts";
 import { GENRES } from "./providers/types.ts";
 import { startDailyIndexer, runDailyIndexer, type IndexerStatus } from "./workers/daily-indexer.ts";
@@ -557,6 +558,10 @@ const FALLBACK_CHAIN: FallbackProvider[] = [
     const s = await getSettings().catch(() => ({} as any));
     return s.unsplashAccessKey || process.env.UNSPLASH_ACCESS_KEY;
   }),
+  new OpenverseProvider(
+    process.env.OPENVERSE_CLIENT_ID || "",
+    process.env.OPENVERSE_CLIENT_SECRET || ""
+  ),
   // Static.photos — no key, category-mapped
   new StaticPhotosProvider(),
   // Keyless deterministic fallbacks

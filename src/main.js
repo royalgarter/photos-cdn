@@ -147,7 +147,9 @@ const registerAppState = () => {
       cfAccountId: "",
       cfApiToken: "",
       hfApiToken: "",
-      cdnDomain: ""
+      cdnDomain: "",
+      openverseClientId: "",
+      openverseClientSecret: "",
     },
     settingsSavedMessage: false,
 
