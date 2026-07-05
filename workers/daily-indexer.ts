@@ -8,6 +8,7 @@ import { Buffer } from "node:buffer";
 import { Jimp } from "jimp";
 import sharp from "sharp";
 import { matchGenre } from "../providers/static-photos.ts";
+import { fetchOpenversePhotos } from "../providers/openverse.ts";
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -227,12 +228,23 @@ export async function runDailyIndexer(deps: IndexerDeps): Promise<IndexerResult>
 
   deps.addLog("system", `[Indexer] ${existingUrls.size} existing images in DB — fetching curated feeds...`);
 
+  const ovClientId = settings.openverseClientId || process.env.OPENVERSE_CLIENT_ID || "";
+  const ovClientSecret = settings.openverseClientSecret || process.env.OPENVERSE_CLIENT_SECRET || "";
+
+  // Diverse Openverse queries covering popular photography genres
+  const openverseQueries = ["nature landscape", "street photography", "portrait", "architecture", "wildlife"];
+
   // Fetch all provider feeds in parallel
-  const [pexelsPhotos, unsplashPhotos, pixabayPhotos, picjumboPhotos] = await Promise.allSettled([
+  const [pexelsPhotos, unsplashPhotos, pixabayPhotos, picjumboPhotos, ...openverseResults] = await Promise.allSettled([
     fetchPexelsCurated(settings.pexelsApiKey || process.env.PEXELS_API_KEY || ""),
     fetchUnsplashEditorial(settings.unsplashAccessKey || process.env.UNSPLASH_ACCESS_KEY || ""),
     fetchPixabayEditors(settings.pixabayApiKey || process.env.PIXABAY_API_KEY || ""),
     fetchPicjumboRSS(),
+    ...(ovClientId ? openverseQueries.map(q =>
+      fetchOpenversePhotos(ovClientId, ovClientSecret, q, 10).then(photos =>
+        photos.map(p => ({ ...p, provider: "Openverse" } as RawPhoto))
+      )
+    ) : []),
   ]);
 
   const allPhotos: RawPhoto[] = [
@@ -240,6 +252,7 @@ export async function runDailyIndexer(deps: IndexerDeps): Promise<IndexerResult>
     ...(unsplashPhotos.status === "fulfilled" ? unsplashPhotos.value : []),
     ...(pixabayPhotos.status === "fulfilled" ? pixabayPhotos.value : []),
     ...(picjumboPhotos.status === "fulfilled" ? picjumboPhotos.value : []),
+    ...openverseResults.flatMap(r => r.status === "fulfilled" ? r.value : []),
   ];
 
   deps.addLog("system", `[Indexer] Fetched ${allPhotos.length} total photos from all providers`);
