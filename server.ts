@@ -1155,7 +1155,7 @@ app.get("/api/cdn/:width/:height", async (req, res) => {
       }
 
       addLog("api", `[Phase 3] Similarity ${similarityScore.toFixed(4)} < 0.85 — SWR: serving best match, generating in background.`);
-      cacheControl = "public, max-age=60, stale-while-revalidate=86400";
+      cacheControl = "public, max-age=300, stale-while-revalidate=86400";
       generateImageAndSave(textQuery, category, seed)
         .then(() => addLog("api", `[Phase 3] Background generation complete for: "${textQuery}"`))
         .catch(err => addLog("api", `[Phase 3 ERROR] Background generation failed: ${(err as Error).message}`));
