@@ -65,7 +65,7 @@ Open `http://localhost:3000` → Settings tab. All credentials except `ARANGO_UR
 | `r2AccessKeyId` / `r2SecretAccessKey` | Cloudflare R2 upload credentials |
 | `r2BucketName` | R2 bucket name |
 | `r2Endpoint` | R2 storage endpoint (`https://<account-id>.r2.cloudflarestorage.com`) |
-| `cdnDomain` | Public CDN domain served to clients (e.g. `https://photos.newsrss.org`) |
+| `cdnDomain` | Public CDN domain served to clients (e.g. `https://lorem.staas.io`) |
 
 ## API Reference
 
@@ -179,8 +179,8 @@ GET /api/cdn/srcset
 ```json
 {
   "key": "gen-abc123",
-  "src": "https://photos.newsrss.org/medium/gen-abc123.jpg",
-  "srcset": "https://photos.newsrss.org/thumbnail/gen-abc123.jpg 150w, ..., https://photos.newsrss.org/desktop_4k/gen-abc123.jpg 3840w",
+  "src": "https://lorem.staas.io/medium/gen-abc123.jpg",
+  "srcset": "https://lorem.staas.io/thumbnail/gen-abc123.jpg 150w, ..., https://lorem.staas.io/desktop_4k/gen-abc123.jpg 3840w",
   "sizes": "(max-width: 360px) 360px, (max-width: 768px) 768px, ..., 3840px",
   "width": 1920,
   "height": 1080,
@@ -310,6 +310,5 @@ Only one env var is required at the OS level:
 ```bash
 ARANGO_URL=https://user:pass@host:port/dbname   # required
 GEMINI_API_KEY=...                               # optional bootstrap (overridden by Settings collection)
-HF_API_TOKEN=...                                 # optional bootstrap for HuggingFace
-PORT=3000                                        # optional, default 3000
+PORT=30470                                        # optional, default 30470
 ```
