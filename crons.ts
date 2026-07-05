@@ -1,38 +1,38 @@
-import { runDailyIndexer } from "./workers/daily-indexer.ts";
+import { crawlFeeds, processOnePending } from "./workers/daily-indexer.ts";
 import { getIndexerDeps, indexerStatus } from "./server.ts";
 
-// Deno.cron("trigger-indexer-fetch", "0 */1 * * *", async () => {
-// 	console.log("[Cron] Triggering /api/indexer/trigger (every 1 hours)...");
-// 	try {
-// 	const res = await fetch(`http://localhost:${process.env.PORT || "34070"}/api/indexer/trigger`, {
-// 			method: "POST",
-// 		});
-// 		const body = await res.json();
-// 		console.log(`[Cron] Indexer trigger response (${res.status}):`, body);
-// 	} catch (err) {
-// 		console.error("[Cron] Failed to trigger indexer:", err);
-// 	}
-// });
+// Cron 1: Crawl all providers every 4 hours — metadata only, no image processing
+Deno.cron("crawl-feeds", "0 */4 * * *", async () => {
+	console.log("[Cron] Crawling provider feeds...");
+	try {
+		const { queued, skipped } = await crawlFeeds(getIndexerDeps());
+		console.log(`[Cron] Crawl done — queued: ${queued}, skipped: ${skipped}`);
+	} catch (err) {
+		console.error("[Cron] Crawl failed:", err);
+	}
+});
 
-Deno.cron("trigger-indexer", "0 */4 * * *", async () => {
-  console.log("[Cron] Starting indexer (every 4 hours)...");
-  if (indexerStatus?.running) {
-    console.log("[Cron] Indexer already running — skipping");
-    return;
-  }
-  if (indexerStatus) indexerStatus.running = true;
-  try {
-    const result = await runDailyIndexer(getIndexerDeps());
-    if (indexerStatus) {
-      indexerStatus.running = false;
-      indexerStatus.lastRun = new Date().toISOString();
-      indexerStatus.lastResult = result;
-    }
-    console.log(
-      `[Cron] Indexer finished — indexed: ${result.indexed}, skipped: ${result.skipped}, errors: ${result.errors} (${(result.duration / 1000).toFixed(1)}s)`,
-    );
-  } catch (err) {
-    if (indexerStatus) indexerStatus.running = false;
-    console.error("[Cron] Indexer failed:", err);
-  }
+// Cron 2: Process exactly 1 pending photo per minute — keeps peak RAM to one image at a time
+Deno.cron("process-pending", "* * * * *", async () => {
+	const deps = getIndexerDeps();
+	const pending = await deps.countPendingPhotos();
+	if (pending === 0) return;
+
+	console.log(`[Cron] Processing 1 pending photo (${pending} remaining)...`);
+	if (indexerStatus?.running) {
+		console.log("[Cron] Processor already running — skipping");
+		return;
+	}
+	if (indexerStatus) indexerStatus.running = true;
+	try {
+		const result = await processOnePending(deps);
+		if (indexerStatus) {
+			indexerStatus.running = false;
+			indexerStatus.lastRun = new Date().toISOString();
+		}
+		console.log(`[Cron] Processor result: ${result} (${pending - 1} remaining)`);
+	} catch (err) {
+		if (indexerStatus) indexerStatus.running = false;
+		console.error("[Cron] Processor failed:", err);
+	}
 });

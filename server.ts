@@ -301,6 +301,7 @@ async function connectToArango() {
 		await ensureCollection("Images");
 		await ensureCollection("Logs");
 		await ensureCollection("Queue");
+		await ensureCollection("PendingPhotos");
 
 		// Load or seed settings document
 		const settingsColl = arangoDb.collection("Settings");
@@ -419,6 +420,47 @@ async function addImage(img: ImageDocument): Promise<void> {
 	await imagesColl.save(img);
 	invalidateImagesCache();
 	addLog("system", `ArangoDB: Inserted document '${img._key}'`);
+}
+
+export interface PendingPhoto {
+	_key: string;
+	sourceUrl: string;
+	pageUrl: string;
+	alt: string;
+	category: string;
+	provider: string;
+	width: number;
+	height: number;
+	createdAt: string;
+}
+
+export async function addPendingPhoto(photo: Omit<PendingPhoto, "_key" | "createdAt">): Promise<void> {
+	if (!arangoDb) throw new Error("ArangoDB not initialized");
+	const coll = arangoDb.collection("PendingPhotos");
+	const _key = `pending-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
+	await coll.save({ _key, ...photo, createdAt: new Date().toISOString() });
+}
+
+export async function getPendingPhotoUrls(): Promise<Set<string>> {
+	if (!arangoDb) return new Set();
+	const cursor = await arangoDb.query(`FOR p IN PendingPhotos RETURN p.sourceUrl`);
+	const urls = await cursor.all() as string[];
+	return new Set(urls);
+}
+
+export async function popOnePendingPhoto(): Promise<PendingPhoto | null> {
+	if (!arangoDb) return null;
+	const cursor = await arangoDb.query(`FOR p IN PendingPhotos SORT p.createdAt ASC LIMIT 1 RETURN p`);
+	const photo = await cursor.next() as PendingPhoto | undefined;
+	if (!photo) return null;
+	await arangoDb.collection("PendingPhotos").remove(photo._key);
+	return photo;
+}
+
+export async function countPendingPhotos(): Promise<number> {
+	if (!arangoDb) return 0;
+	const cursor = await arangoDb.query(`RETURN LENGTH(PendingPhotos)`);
+	return (await cursor.next() as number) || 0;
 }
 
 const MIN_SIMILARITY = 0.3; // below this, no match — serve fallback provider instead
@@ -1539,6 +1581,10 @@ export function getIndexerDeps() {
 		getSettings,
 		getImages,
 		addImage,
+		addPendingPhoto,
+		getPendingPhotoUrls,
+		popOnePendingPhoto,
+		countPendingPhotos,
 		getEmbeddingVector,
 		uploadToS3,
 		compressImage,

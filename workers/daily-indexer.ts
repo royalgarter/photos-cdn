@@ -1,7 +1,11 @@
 /**
- * Daily indexer worker — fetches curated/editorial images from free stock providers,
- * deduplicates against existing DB, vectorizes, uploads to R2, and saves to ArangoDB.
- * Chain: Pexels curated → Unsplash editorial → Pixabay editors-choice → Picjumbo RSS
+ * Daily indexer — two-phase design to stay within 512MB RAM:
+ *
+ * Phase 1 (crawlFeeds): fetch metadata from all providers, save as PendingPhotos.
+ *   No image downloading or processing. Runs every 4h.
+ *
+ * Phase 2 (processOnePending): pick 1 pending photo, download + resize + upload + save to Images.
+ *   Runs every 1 minute. Processes exactly one photo then exits, keeping peak RAM minimal.
  */
 
 import { Buffer } from "node:buffer";
@@ -9,6 +13,7 @@ import sharp from "sharp";
 import { matchGenre } from "../providers/static-photos.ts";
 import { fetchOpenversePhotos } from "../providers/openverse.ts";
 import { fetchBingDaily, fetchWikimediaFeatured, fetchFlickrPublic } from "../providers/free-providers.ts";
+import type { PendingPhoto } from "../server.ts";
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -16,6 +21,10 @@ export interface IndexerDeps {
 	getSettings: () => Promise<any>;
 	getImages: () => Promise<any[]>;
 	addImage: (doc: any) => Promise<void>;
+	addPendingPhoto: (photo: Omit<PendingPhoto, "_key" | "createdAt">) => Promise<void>;
+	getPendingPhotoUrls: () => Promise<Set<string>>;
+	popOnePendingPhoto: () => Promise<PendingPhoto | null>;
+	countPendingPhotos: () => Promise<number>;
 	getEmbeddingVector: (text: string) => Promise<number[]>;
 	uploadToS3: (settings: any, resName: string, key: string, buffer: Buffer, mime: string) => Promise<string | null>;
 	compressImage: (buffer: Buffer, mime: string) => Promise<Buffer>;
@@ -39,7 +48,7 @@ export interface IndexerResult {
 	byProvider: Record<string, { indexed: number; skipped: number; errors: number }>;
 }
 
-// ── Curated feed fetchers ─────────────────────────────────────────────────────
+// ── Provider feed fetchers ────────────────────────────────────────────────────
 
 interface RawPhoto {
 	sourceUrl: string;
@@ -110,7 +119,6 @@ async function fetchPixabayEditors(apiKey: string, perPage = 40): Promise<RawPho
 }
 
 async function fetchPicjumboRSS(): Promise<RawPhoto[]> {
-	// Picjumbo free RSS feed — parse enclosure URLs
 	const res = await fetch("https://picjumbo.com/feed/", { signal: AbortSignal.timeout(10000) });
 	if (!res.ok) return [];
 	const xml = await res.text();
@@ -135,34 +143,81 @@ async function fetchPicjumboRSS(): Promise<RawPhoto[]> {
 	return items.slice(0, 20);
 }
 
-// ── Core indexing logic ───────────────────────────────────────────────────────
+// ── Phase 1: Crawl feeds, enqueue pending ────────────────────────────────────
 
-const PHOTO_TIMEOUT_MS = 60_000; // 1 minute per photo
+export async function crawlFeeds(deps: IndexerDeps): Promise<{ queued: number; skipped: number }> {
+	const settings = await deps.getSettings();
 
-async function indexPhoto(
-	photo: RawPhoto,
-	deps: IndexerDeps,
-	settings: any,
-	existingUrls: Set<string>
-): Promise<{ result: "indexed" | "skipped" | "error"; cdnUrl?: string }> {
-	if (existingUrls.has(photo.sourceUrl)) return { result: "skipped" };
+	const existing = await deps.getImages();
+	const existingUrls = new Set<string>(existing.map((img: any) => img.sourceUrl));
+	const pendingUrls = await deps.getPendingPhotoUrls();
+	const knownUrls = new Set([...existingUrls, ...pendingUrls]);
 
-	const timeout = new Promise<{ result: "error" }>((resolve) =>
-		setTimeout(() => resolve({ result: "error" }), PHOTO_TIMEOUT_MS)
-	);
+	const ovClientId = settings.openverseClientId || process.env.OPENVERSE_CLIENT_ID || "";
+	const ovClientSecret = settings.openverseClientSecret || process.env.OPENVERSE_CLIENT_SECRET || "";
+	const openverseQueries = ["nature landscape", "street photography", "portrait", "architecture", "wildlife"];
 
-	return Promise.race([_indexPhotoCore(photo, deps, settings, existingUrls), timeout]);
+	const [pexelsPhotos, unsplashPhotos, pixabayPhotos, picjumboPhotos, bingPhotos, wikimediaPhotos, flickrPhotos, ...openverseResults] = await Promise.allSettled([
+		fetchPexelsCurated(settings.pexelsApiKey || process.env.PEXELS_API_KEY || ""),
+		fetchUnsplashEditorial(settings.unsplashAccessKey || process.env.UNSPLASH_ACCESS_KEY || ""),
+		fetchPixabayEditors(settings.pixabayApiKey || process.env.PIXABAY_API_KEY || ""),
+		fetchPicjumboRSS(),
+		fetchBingDaily(16).then(photos => photos.map(p => ({ ...p, provider: "Bing" } as RawPhoto))),
+		fetchWikimediaFeatured("Quality_images_of_landscapes", 20).then(photos => photos.map(p => ({ ...p, provider: "Wikimedia" } as RawPhoto))),
+		fetchFlickrPublic("landscape nature", 20).then(photos => photos.map(p => ({ ...p, provider: "Flickr" } as RawPhoto))),
+		...(ovClientId ? openverseQueries.map(q =>
+			fetchOpenversePhotos(ovClientId, ovClientSecret, q, 10).then(photos =>
+				photos.map(p => ({ ...p, provider: "Openverse" } as RawPhoto))
+			)
+		) : []),
+	]);
+
+	const allPhotos: RawPhoto[] = [
+		...(pexelsPhotos.status === "fulfilled" ? pexelsPhotos.value : []),
+		...(unsplashPhotos.status === "fulfilled" ? unsplashPhotos.value : []),
+		...(pixabayPhotos.status === "fulfilled" ? pixabayPhotos.value : []),
+		...(picjumboPhotos.status === "fulfilled" ? picjumboPhotos.value : []),
+		...(bingPhotos.status === "fulfilled" ? bingPhotos.value : []),
+		...(wikimediaPhotos.status === "fulfilled" ? wikimediaPhotos.value : []),
+		...(flickrPhotos.status === "fulfilled" ? flickrPhotos.value : []),
+		...openverseResults.flatMap(r => r.status === "fulfilled" ? r.value : []),
+	];
+
+	let queued = 0, skipped = 0;
+	for (const photo of allPhotos) {
+		if (knownUrls.has(photo.sourceUrl)) { skipped++; continue; }
+		await deps.addPendingPhoto(photo);
+		knownUrls.add(photo.sourceUrl);
+		queued++;
+	}
+
+	deps.addLog("system", `[Crawler] Fetched ${allPhotos.length} photos — queued: ${queued}, skipped: ${skipped}`);
+	return { queued, skipped };
 }
 
-async function _indexPhotoCore(
-	photo: RawPhoto,
+// ── Phase 2: Process exactly one pending photo ────────────────────────────────
+
+const PHOTO_TIMEOUT_MS = 60_000;
+
+export async function processOnePending(deps: IndexerDeps): Promise<"processed" | "skipped" | "empty" | "error"> {
+	const photo = await deps.popOnePendingPhoto();
+	if (!photo) return "empty";
+
+	const settings = await deps.getSettings();
+
+	const timeout = new Promise<"error">((resolve) => setTimeout(() => resolve("error"), PHOTO_TIMEOUT_MS));
+	const work = _processPhoto(photo, deps, settings);
+	return Promise.race([work, timeout]);
+}
+
+async function _processPhoto(
+	photo: PendingPhoto,
 	deps: IndexerDeps,
 	settings: any,
-	existingUrls: Set<string>
-): Promise<{ result: "indexed" | "skipped" | "error"; cdnUrl?: string }> {
+): Promise<"processed" | "error"> {
 	try {
 		const imgRes = await fetch(photo.sourceUrl, { signal: AbortSignal.timeout(12000) });
-		if (!imgRes.ok) return { result: "error" };
+		if (!imgRes.ok) return "error";
 
 		const raw = Buffer.from(await imgRes.arrayBuffer());
 		const { genre, staticSlug: category } = matchGenre(`${photo.alt} ${photo.category}`);
@@ -207,124 +262,36 @@ async function _indexPhotoCore(
 			indexedAt: new Date().toISOString(),
 		});
 
-		existingUrls.add(photo.sourceUrl);
 		const cdnUrl = variants["800x600"] || variants["1200x630"] || Object.values(variants)[0] || "";
-		deps.addLog("system", `[Indexer] Saved ${key} from ${photo.provider}: "${photo.alt.slice(0, 60)}" → ${cdnUrl}`);
-		return { result: "indexed", cdnUrl };
+		deps.addLog("system", `[Processor] Saved ${key} from ${photo.provider}: "${photo.alt.slice(0, 60)}" → ${cdnUrl}`);
+		return "processed";
 	} catch (err) {
-		deps.addLog("system", `[Indexer] Error indexing ${photo.sourceUrl}: ${(err as Error).message}`);
-		return { result: "error" };
+		deps.addLog("system", `[Processor] Error processing ${photo.sourceUrl}: ${(err as Error).message}`);
+		return "error";
 	}
 }
 
-// ── Main run function ─────────────────────────────────────────────────────────
+// ── Legacy runDailyIndexer (kept for /api/indexer/trigger compat) ─────────────
 
 export async function runDailyIndexer(deps: IndexerDeps): Promise<IndexerResult> {
 	const start = Date.now();
-	deps.addLog("system", "[Indexer] Daily scan started");
-
-	const settings = await deps.getSettings();
-	const existing = await deps.getImages();
-	const existingUrls = new Set<string>(existing.map((img: any) => img.sourceUrl));
-
-	deps.addLog("system", `[Indexer] ${existingUrls.size} existing images in DB — fetching curated feeds...`);
-
-	const ovClientId = settings.openverseClientId || process.env.OPENVERSE_CLIENT_ID || "";
-	const ovClientSecret = settings.openverseClientSecret || process.env.OPENVERSE_CLIENT_SECRET || "";
-
-	// Diverse Openverse queries covering popular photography genres
-	const openverseQueries = ["nature landscape", "street photography", "portrait", "architecture", "wildlife"];
-
-	// Fetch all provider feeds in parallel
-	const [pexelsPhotos, unsplashPhotos, pixabayPhotos, picjumboPhotos, bingPhotos, wikimediaPhotos, flickrPhotos, ...openverseResults] = await Promise.allSettled([
-		fetchPexelsCurated(settings.pexelsApiKey || process.env.PEXELS_API_KEY || ""),
-		fetchUnsplashEditorial(settings.unsplashAccessKey || process.env.UNSPLASH_ACCESS_KEY || ""),
-		fetchPixabayEditors(settings.pixabayApiKey || process.env.PIXABAY_API_KEY || ""),
-		fetchPicjumboRSS(),
-		fetchBingDaily(16).then(photos => photos.map(p => ({ ...p, provider: "Bing" } as RawPhoto))),
-		fetchWikimediaFeatured("Quality_images_of_landscapes", 20).then(photos => photos.map(p => ({ ...p, provider: "Wikimedia" } as RawPhoto))),
-		fetchFlickrPublic("landscape nature", 20).then(photos => photos.map(p => ({ ...p, provider: "Flickr" } as RawPhoto))),
-		...(ovClientId ? openverseQueries.map(q =>
-			fetchOpenversePhotos(ovClientId, ovClientSecret, q, 10).then(photos =>
-				photos.map(p => ({ ...p, provider: "Openverse" } as RawPhoto))
-			)
-		) : []),
-	]);
-
-	const allPhotos: RawPhoto[] = [
-		...(pexelsPhotos.status === "fulfilled" ? pexelsPhotos.value : []),
-		...(unsplashPhotos.status === "fulfilled" ? unsplashPhotos.value : []),
-		...(pixabayPhotos.status === "fulfilled" ? pixabayPhotos.value : []),
-		...(picjumboPhotos.status === "fulfilled" ? picjumboPhotos.value : []),
-		...(bingPhotos.status === "fulfilled" ? bingPhotos.value : []),
-		...(wikimediaPhotos.status === "fulfilled" ? wikimediaPhotos.value : []),
-		...(flickrPhotos.status === "fulfilled" ? flickrPhotos.value : []),
-		...openverseResults.flatMap(r => r.status === "fulfilled" ? r.value : []),
-	];
-
-	deps.addLog("system", `[Indexer] Fetched ${allPhotos.length} total photos from all providers`);
-
-	const byProvider: Record<string, { indexed: number; skipped: number; errors: number }> = {};
-	let totalIndexed = 0, totalSkipped = 0, totalErrors = 0;
-
-	// Sequential + 500ms pause between photos — lets V8 GC collect previous buffers before next allocation
-	for (let i = 0; i < allPhotos.length; i++) {
-		const photo = allPhotos[i];
-		console.log(`[Indexer] Photo ${i + 1}/${allPhotos.length} [${photo.provider}] (indexed:${totalIndexed} skipped:${totalSkipped} errors:${totalErrors})`);
-
-		const { result: r, cdnUrl } = await indexPhoto(photo, deps, settings, existingUrls);
-		const p = photo.provider;
-		if (!byProvider[p]) byProvider[p] = { indexed: 0, skipped: 0, errors: 0 };
-
-		if (r === "indexed") {
-			byProvider[p].indexed++; totalIndexed++;
-			console.log(`[Indexer] ✓ [${p}] ${photo.alt.slice(0, 60)} → ${cdnUrl}`);
-		} else if (r === "skipped") {
-			byProvider[p].skipped++;
-			totalSkipped++;
-		} else {
-			byProvider[p].errors++; totalErrors++;
-			console.log(`[Indexer] ✗ [${p}] timeout/error: ${photo.sourceUrl.slice(0, 80)}`);
-		}
-
-		if (r !== "skipped") await new Promise(r => setTimeout(r, 500));
-	}
-
-	const duration = Date.now() - start;
-	const result: IndexerResult = { duration, indexed: totalIndexed, skipped: totalSkipped, errors: totalErrors, byProvider };
-	deps.addLog("system", `[Indexer] Done in ${(duration / 1000).toFixed(1)}s — indexed: ${totalIndexed}, skipped: ${totalSkipped}, errors: ${totalErrors}`);
-	return result;
+	deps.addLog("system", "[Indexer] crawlFeeds started");
+	await crawlFeeds(deps);
+	deps.addLog("system", "[Indexer] crawlFeeds done — photos queued for per-minute processor");
+	return {
+		duration: Date.now() - start,
+		indexed: 0,
+		skipped: 0,
+		errors: 0,
+		byProvider: {},
+	};
 }
 
-// ── Scheduler ─────────────────────────────────────────────────────────────────
-
-const INTERVAL_MS = 24 * 60 * 60 * 1000; // 24 hours
-
 export function startDailyIndexer(deps: IndexerDeps): IndexerStatus {
-	const status: IndexerStatus = {
+	return {
 		running: false,
 		lastRun: null,
 		lastResult: null,
-		nextRun: new Date(Date.now() + INTERVAL_MS).toISOString(),
+		nextRun: null,
 	};
-
-	const run = async () => {
-		if (status.running) return;
-		status.running = true;
-		status.lastRun = new Date().toISOString();
-		try {
-			status.lastResult = await runDailyIndexer(deps);
-		} catch (err) {
-			deps.addLog("system", `[Indexer] Fatal error: ${(err as Error).message}`);
-		} finally {
-			status.running = false;
-			status.nextRun = new Date(Date.now() + INTERVAL_MS).toISOString();
-		}
-	};
-
-	// Run once at startup (after 30s delay to let server warm up), then every 24h
-	// setTimeout(run, 30_000);
-	// setInterval(run, INTERVAL_MS);
-
-	return status;
 }
