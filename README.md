@@ -1,4 +1,4 @@
-# Photos CDN
+# Lorem Ipsum Photos
 
 AI-powered image CDN with semantic vector search. Serves images by dimensions, category, or natural-language text query. Generates new images on-demand when no close match exists in the database.
 
