@@ -15,6 +15,7 @@ import { BingProvider, WikimediaProvider, FlickrPublicProvider } from "./provide
 import type { FallbackProvider } from "./providers/types.ts";
 import { GENRES } from "./providers/types.ts";
 import { startDailyIndexer, runDailyIndexer, type IndexerStatus } from "./workers/daily-indexer.ts";
+import "./crons.ts";
 
 const app = express();
 const PORT = parseInt(process.env.PORT || "34070");
