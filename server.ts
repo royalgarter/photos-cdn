@@ -1508,14 +1508,12 @@ function buildSrcsetPayload(image: ImageDocument, fmt: OutputFormat, similarity:
     src,
     srcset: srcsetParts.join(", "),
     sizes,
-    width: 1920,
-    height: 1080,
     alt: image.text,
     format: fmt,
     similarity,
     isFallback,
-    blurhash: "L6PZfHeD.AyD_N%g9GMy?v%0IAxG",
     metadata: {
+      key: image._key,
       category: image.category,
       seed: image.seed,
       prompt: image.text

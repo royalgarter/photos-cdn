@@ -127,7 +127,7 @@ const registerAppState = () => {
     seed: Math.floor(Math.random() * 1e4),
     category: "nature",
     format: "image",
-    text: "Lorem ipsum dolor sit amet. The quick brown fox jumps over the lazy dog.",
+    text: "mountain lake at golden hour sunset",
 
     // Server state
     images: [],
@@ -372,64 +372,81 @@ const registerAppState = () => {
     // Execute Sandbox GET Call
     async executeApiCall() {
       this.loading = true;
-      this.activeStep = 1; // Interception
+      this.activeStep = 1;
       const startTime = Date.now();
 
-      const queryParams = new URLSearchParams({
+      const baseParams = new URLSearchParams({
         category: this.category,
         seed: this.seed.toString(),
-        format: this.format
       });
-      if (this.text) queryParams.append("text", this.text);
+      if (this.text) baseParams.append("text", this.text);
 
-      const testUrl = `/api/cdn/${this.width}/${this.height}?${queryParams.toString()}`;
+      // Fetch metadata via blurhash format — returns JSON with similarity, key, genre, etc.
+      // This avoids the opaque-redirect problem (redirect: "manual" strips all headers).
+      const metaParams = new URLSearchParams(baseParams);
+      metaParams.set("format", "blurhash");
+      const metaUrl = `/api/cdn/${this.width}/${this.height}?${metaParams.toString()}`;
+
+      // Final display URL uses the user-selected format
+      const imageParams = new URLSearchParams(baseParams);
+      imageParams.set("format", this.format);
+      const testUrl = `/api/cdn/${this.width}/${this.height}?${imageParams.toString()}`;
 
       try {
-        // Step transition simulations
         setTimeout(() => { this.activeStep = 2; }, 350);
 
-        const res = await fetch(testUrl, { redirect: "manual" });
+        const res = await fetch(metaUrl);
         const duration = Date.now() - startTime;
 
-        const similarityHeader = res.headers.get("X-Similarity-Score");
-        const similarity = similarityHeader ? parseFloat(similarityHeader) : 1.0;
-        const isAsync = res.headers.get("X-Async-Generated") === "true";
-        const cacheControl = res.headers.get("Cache-Control") || "None";
-        const genre = res.headers.get("X-Genre") || "";
-        const genreSlug = res.headers.get("X-Genre-Slug") || "";
-
-        if (isAsync) {
-          setTimeout(() => { this.activeStep = 3; }, 700);
-        }
-
-        setTimeout(() => { this.activeStep = 4; }, isAsync ? 1100 : 800);
-
-        let finalUrl = testUrl;
+        let similarity = 0;
+        let isAsync = false;
+        let cacheControl = "None";
+        let genre = "";
+        let genreSlug = "";
         let blurhashStr = "";
-        const isRedirect = res.status === 0 || (res.status >= 300 && res.status < 400);
+        let finalUrl = testUrl;
+        let matchedImage = null;
 
-        if (res.ok || isRedirect) {
+        if (res.ok) {
+          const data = await res.json();
+
+          similarity = typeof data.similarity === "number" ? data.similarity : 0;
+          isAsync = res.headers.get("X-Async-Generated") === "true";
+          cacheControl = res.headers.get("Cache-Control") || "None";
+          genre = res.headers.get("X-Genre") || "";
+          genreSlug = res.headers.get("X-Genre-Slug") || "";
+          blurhashStr = data.blurhash || "";
+
+          // For image/lqip formats, use the CDN URL directly as img src
           if (this.format === "blurhash") {
-            if (res.headers.get("Content-Type")?.includes("application/json")) {
-              const data = await res.json();
-              blurhashStr = data.blurhash;
-              finalUrl = data.sourceUrl;
-            } else {
-              console.warn("Expected JSON response for blurhash format but got non-JSON payload.");
-            }
+            finalUrl = data.sourceUrl || testUrl;
           } else {
-            finalUrl = res.url || testUrl;
+            finalUrl = testUrl; // browser fetches this directly, no JS redirect
+          }
+
+          // Match against loaded images by key from metadata
+          const key = data.metadata?.key || res.headers.get("X-Image-Key");
+          if (key) {
+            matchedImage = this.images.find(img => img._key === key) || null;
+          }
+          // Fallback: match by similarity on text
+          if (!matchedImage && data.metadata?.prompt) {
+            matchedImage = this.images.find(img => img.text === data.metadata.prompt) || null;
           }
         } else {
-          console.warn(`API request to ${testUrl} failed with status: ${res.status}`);
+          console.warn(`Metadata fetch failed: ${res.status}`);
+          similarity = 0;
+          finalUrl = testUrl;
         }
 
-        const matchedImage = this.images.find(
-          (img) => finalUrl && (finalUrl.includes(img._key) || finalUrl.includes(encodeURIComponent(img.text)))
-        );
+        if (isAsync) setTimeout(() => { this.activeStep = 3; }, 700);
+        setTimeout(() => { this.activeStep = 4; }, isAsync ? 1100 : 800);
+
+        // Derive the delivery status for display: blurhash → 200 JSON, image/lqip → 302 redirect
+        const deliveryStatus = this.format === "blurhash" ? 200 : 302;
 
         this.testResult = {
-          status: res.status === 0 ? 302 : res.status,
+          status: deliveryStatus,
           url: finalUrl,
           requestUrl: window.location.origin + testUrl,
           similarity,
@@ -442,26 +459,20 @@ const registerAppState = () => {
           genreSlug,
         };
 
-        // Render blurhash canvas if present
         if (blurhashStr) {
           this.$nextTick(() => {
             const canvas = document.getElementById("blurhash-canvas");
-            if (canvas) {
-              renderBlurhash(blurhashStr, canvas);
-            }
+            if (canvas) renderBlurhash(blurhashStr, canvas);
           });
         }
 
-        // Reset steps after delay
         setTimeout(() => { this.activeStep = null; }, 2500);
 
       } catch (error) {
         console.error("API simulation error:", error);
       } finally {
         this.loading = false;
-        this.$nextTick(() => {
-          renderIcons();
-        });
+        this.$nextTick(() => { renderIcons(); });
       }
     },
 

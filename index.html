@@ -133,7 +133,7 @@
           <div class="bg-white border border-gray-300 p-4 flex items-center justify-between hover:border-blue-500 transition-colors">
             <div class="space-y-1">
               <span class="text-xs text-gray-500 font-mono tracking-wider uppercase block">Latest Match</span>
-              <span class="text-lg font-bold font-mono text-gray-900" x-text="testResult ? (testResult.similarity * 100).toFixed(1) + '%' : '100.0%'"></span>
+              <span class="text-lg font-bold font-mono text-gray-900" x-text="testResult ? (testResult.similarity * 100).toFixed(1) + '%' : '—'"></span>
             </div>
             <div class="h-10 w-10 border border-gray-300 flex items-center justify-center text-gray-600">
               <i data-lucide="zap" class="h-4 w-4"></i>
@@ -485,7 +485,7 @@
                     <div class="bg-gray-50 p-4 border border-gray-300 text-xs space-y-2">
                       <div class="flex justify-between border-b border-gray-200 pb-1.5 mb-1.5">
                         <span class="text-gray-500">HTTP Status</span>
-                        <span class="text-green-600 font-bold" x-text="testResult ? (testResult.status === 302 ? '302 Found' : '200 OK') : ''"></span>
+                        <span class="font-bold" :class="testResult && testResult.status === 302 ? 'text-blue-600' : 'text-green-600'" x-text="testResult ? (testResult.status === 302 ? '302 Found (image redirect)' : '200 OK (JSON)') : ''"></span>
                       </div>
                       <div class="flex justify-between">
                         <span class="text-gray-500">Execution Time</span>
@@ -513,10 +513,10 @@
                     <div class="bg-white p-4 border border-gray-300 text-xs">
                       <span class="text-gray-600 font-semibold block mb-2">Evaluated Match Document</span>
                       <div class="space-y-1.5" x-show="testResult">
-                        <p class="text-gray-950 font-medium" x-text="testResult && testResult.matchedImage ? '&quot;' + testResult.matchedImage.text + '&quot;' : '&quot;Default Scenic Mountain Fallback&quot;'"></p>
+                        <p class="text-gray-950 font-medium" x-text="testResult && testResult.matchedImage ? '&quot;' + testResult.matchedImage.text + '&quot;' : '(no match loaded — authenticate to inspect)'"></p>
                         <div class="flex gap-2 text-xs font-mono">
-                          <span class="px-2 py-0.5 border border-gray-200 text-gray-600" x-text="testResult && testResult.matchedImage ? 'ID: ' + testResult.matchedImage._key : 'ID: fallback'"></span>
-                          <span class="px-2 py-0.5 border border-gray-200 text-gray-600" x-text="testResult && testResult.matchedImage ? 'Category: ' + testResult.matchedImage.category : 'Category: nature'"></span>
+                          <span class="px-2 py-0.5 border border-gray-200 text-gray-600" x-text="testResult && testResult.matchedImage ? 'ID: ' + testResult.matchedImage._key : 'ID: —'"></span>
+                          <span class="px-2 py-0.5 border border-gray-200 text-gray-600" x-text="testResult && testResult.matchedImage ? 'Category: ' + testResult.matchedImage.category : 'Category: —'"></span>
                         </div>
                       </div>
                     </div>
@@ -528,12 +528,28 @@
                       
                       <!-- Blurhash Display -->
                       <div x-show="format === 'blurhash'" class="absolute inset-0 flex flex-col items-center justify-center p-4">
-                        <div class="w-full h-full max-h-40 relative overflow-hidden border border-gray-300">
-                          <canvas id="blurhash-canvas" class="w-full h-full object-cover rounded-lg filter blur-md"></canvas>
-                        </div>
+                        <!-- Canvas: shown only when real blurhash returned -->
+                        <template x-if="testResult && testResult.blurhash">
+                          <div class="w-full h-full max-h-40 relative overflow-hidden border border-gray-300">
+                            <canvas id="blurhash-canvas" class="w-full h-full object-cover rounded-lg filter blur-md"></canvas>
+                          </div>
+                        </template>
+                        <!-- Source image preview as fallback when no blurhash computed -->
+                        <template x-if="testResult && !testResult.blurhash">
+                          <div class="w-full h-full max-h-40 relative overflow-hidden border border-gray-300">
+                            <img :src="testResult.url" class="w-full h-full object-cover filter blur-sm" referrerpolicy="no-referrer" alt="source" />
+                          </div>
+                        </template>
                         <div class="mt-3 text-center space-y-1 w-full">
-                          <span class="text-xs text-gray-500 font-mono">Decoded Blurhash (32x32 DCT grid)</span>
-                          <p class="text-xs font-mono text-blue-600 bg-gray-50 border border-gray-300 px-3 py-1 select-all break-all max-w-full" x-text="testResult ? testResult.blurhash : ''"></p>
+                          <template x-if="testResult && testResult.blurhash">
+                            <div>
+                              <span class="text-xs text-gray-500 font-mono">Decoded Blurhash (32x32 DCT grid)</span>
+                              <p class="text-xs font-mono text-blue-600 bg-gray-50 border border-gray-300 px-3 py-1 select-all break-all max-w-full" x-text="testResult.blurhash"></p>
+                            </div>
+                          </template>
+                          <template x-if="testResult && !testResult.blurhash">
+                            <p class="text-xs font-mono text-gray-400">Blurhash not yet computed — showing source image preview. Similarity: <span class="text-blue-600 font-bold" x-text="testResult.similarity.toFixed(4)"></span></p>
+                          </template>
                         </div>
                       </div>
 
@@ -575,13 +591,13 @@
                     </div>
 
                     <!-- External link to raw CDN URL -->
-                    <a 
-                      :href="testResult ? testResult.url : '#'" 
-                      target="_blank" 
+                    <a
+                      :href="testResult ? testResult.url : '#'"
+                      target="_blank"
                       rel="noreferrer"
                       class="mt-3 text-xs text-blue-600 hover:text-blue-800 font-mono flex items-center gap-1.5 self-end hover:underline cursor-pointer"
                     >
-                      Open Raw Edge CDN Redirect URL
+                      <span x-text="format === 'blurhash' ? 'Open Source Image URL' : 'Open Raw CDN URL (follows redirect)'"></span>
                       <i data-lucide="external-link" class="h-3 w-3"></i>
                     </a>
                   </div>
@@ -807,12 +823,12 @@
                       <div class="space-y-1">
                         <div class="flex justify-between text-xs text-gray-500">
                           <span x-text="
-                            job.status === 'pending' ? 'Waiting for thread...' :
-                            job.progress === 20 ? 'Triggering Replicate SDXL generation' :
-                            job.progress === 40 ? 'Downsampling image buffer natively' :
-                            job.progress === 60 ? 'Uploading asset to CF R2 with Web Crypto SigV4' :
-                            job.progress === 80 ? 'Computing vector embeddings using CF Worker AI' :
-                            job.progress === 100 ? 'Inserting index metadata to ArangoDB' : 'Running computation...'
+                            job.status === 'pending' ? 'Waiting for worker thread...' :
+                            job.status === 'failed' ? 'Job failed' :
+                            job.status === 'completed' ? 'Completed — image indexed in ArangoDB' :
+                            job.progress <= 5 ? 'Worker picked up job...' :
+                            job.progress <= 25 ? 'Fetching base image + computing embedding vector...' :
+                            'Generating image via provider chain, resizing variants...'
                           "></span>
                           <span x-text="job.progress + '%'"></span>
                         </div>
