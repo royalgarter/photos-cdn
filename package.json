@@ -1,19 +1,12 @@
 {
-  "name": "react-example",
-  "private": true,
-  "version": "0.0.0",
+  "name": "lorem-photos",
+  "version": "1.0.0",
   "type": "module",
   "scripts": {
-    "dev": "deno run --allow-all --env=.env server.ts",
-    "start": "deno run --allow-all --env=.env server.ts",
-    "dev:node": "node --experimental-strip-types server.ts",
-    "start:node": "node --experimental-strip-types server.ts",
-    "build": "echo 'No build step required'",
-    "lint": "echo 'No lint required'",
-    "indexer:trigger": "curl -s -X POST http://localhost:34070/api/indexer/trigger | python3 -m json.tool",
-    "indexer:trigger:remote": "curl -s -X POST https://photos-cdn.royalgarter88.deno.net/api/indexer/trigger | python3 -m json.tool",
-    "indexer:status": "curl -s http://localhost:34070/api/indexer/status | python3 -m json.tool",
-    "indexer:status:remote": "curl -s https://photos-cdn.royalgarter88.deno.net/api/indexer/status | python3 -m json.tool"
+    "start": "deno task start",
+    "start:node": "node --experimental-strip-types --env-file=.env server.ts",
+    "indexer": "curl -s -X POST http://localhost:34070/api/indexer/trigger | jq",
+    "indexer:status": "curl -s http://localhost:34070/api/indexer/status | jq"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1079.0",
