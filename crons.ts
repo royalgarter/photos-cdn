@@ -1,8 +1,8 @@
 import { crawlFeeds, processOnePending } from "./workers/daily-indexer.ts";
 import { getIndexerDeps, indexerStatus } from "./server.ts";
 
-// Cron 1: Crawl all providers every 4 hours — metadata only, no image processing
-Deno.cron("crawl-feeds", "0 */4 * * *", async () => {
+// Cron 1: Crawl all providers every 1 hours — metadata only, no image processing
+Deno.cron("crawl-feeds", "0 */1 * * *", async () => {
 	console.log("[Cron] Crawling provider feeds...");
 	try {
 		const { queued, skipped } = await crawlFeeds(getIndexerDeps());
