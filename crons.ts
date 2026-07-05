@@ -4,6 +4,7 @@ import { getIndexerDeps, indexerStatus } from "./server.ts";
 Deno.cron("trigger-indexer-fetch", "0 */1 * * *", async () => {
   console.log("[Cron] Triggering /api/indexer/trigger (every 4 hours)...");
   try {
+    const PORT = parseInt(process.env.PORT || "34070");
     const res = await fetch(`http://localhost:${PORT}/api/indexer/trigger`, {
       method: "POST",
     });
