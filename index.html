@@ -387,6 +387,15 @@
 
                   </div>
 
+                  <!-- Live URL preview -->
+                  <div class="bg-gray-50 border border-gray-200 px-3 py-2 flex items-center gap-2">
+                    <span class="text-xs font-bold text-blue-600 font-mono shrink-0">GET</span>
+                    <code
+                      class="text-xs text-gray-600 font-mono truncate flex-1"
+                      x-text="`/api/cdn/${width}/${height}?` + new URLSearchParams(Object.fromEntries([['category',category],['seed',seed],['format',format],...(text ? [['text',text]] : [])])).toString()"
+                    ></code>
+                  </div>
+
                   <!-- Request Action Button -->
                   <button
                     @click="executeApiCall()"
@@ -408,8 +417,33 @@
 
 
 
+              <!-- Full GET URL bar -->
+              <div x-show="testResult !== null" class="bg-gray-900 border border-gray-700 px-4 py-3 flex items-center gap-3" x-transition>
+                <span class="text-xs font-bold text-green-400 font-mono shrink-0">GET</span>
+                <code
+                  class="flex-1 text-xs text-gray-100 font-mono break-all select-all leading-relaxed"
+                  x-text="testResult ? testResult.requestUrl : ''"
+                ></code>
+                <button
+                  @click="navigator.clipboard.writeText(testResult.requestUrl).then(() => { $el.innerHTML = '<svg xmlns=\'http://www.w3.org/2000/svg\' width=\'14\' height=\'14\' viewBox=\'0 0 24 24\' fill=\'none\' stroke=\'currentColor\' stroke-width=\'2\' stroke-linecap=\'round\' stroke-linejoin=\'round\'><polyline points=\'20 6 9 17 4 12\'></polyline></svg>'; setTimeout(() => lucide.createIcons(), 50); setTimeout(() => { $el.innerHTML = \'<i data-lucide=\\\"copy\\\" class=\\\"h-3.5 w-3.5\\\"></i>\'; lucide.createIcons(); }, 1500) })"
+                  class="shrink-0 text-gray-400 hover:text-white transition-colors p-1 cursor-pointer"
+                  title="Copy URL"
+                >
+                  <i data-lucide="copy" class="h-3.5 w-3.5"></i>
+                </button>
+                <a
+                  :href="testResult ? testResult.requestUrl : '#'"
+                  target="_blank"
+                  rel="noreferrer"
+                  class="shrink-0 text-gray-400 hover:text-white transition-colors p-1"
+                  title="Open in new tab"
+                >
+                  <i data-lucide="external-link" class="h-3.5 w-3.5"></i>
+                </button>
+              </div>
+
               <!-- 3. API Response Output -->
-              <div x-show="testResult !== null" class="bg-white border border-gray-300 p-6" x-transition>
+              <div x-show="testResult !== null" class="bg-white border border-gray-300 border-t-0 p-6" x-transition>
                 <h3 class="text-xs font-bold text-gray-900 mb-4 flex items-center gap-2">
                   <i data-lucide="eye" class="h-4 w-4 text-green-600"></i>
                   Client-Side Delivery Response

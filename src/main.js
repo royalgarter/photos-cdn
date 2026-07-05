@@ -389,6 +389,7 @@ const registerAppState = () => {
         this.testResult = {
           status: res.status === 0 ? 302 : res.status,
           url: finalUrl,
+          requestUrl: window.location.origin + testUrl,
           similarity,
           cacheControl,
           isAsync,
