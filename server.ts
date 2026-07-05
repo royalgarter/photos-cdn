@@ -72,6 +72,8 @@ interface AppSettings {
   pixabayApiKey: string;
   // placeholder: stabilityApiKey: string;
   // placeholder: openaiApiKey: string;
+  // Transient: set by generateImageWithFallback before calling providers
+  baseImg?: { buffer: Buffer; mimeType: string; provider: string } | null;
 }
 
 // ==========================================
@@ -601,9 +603,14 @@ interface GeneratedImage {
 
 async function generateWithGemini(
   prompt: string,
-  baseImg: { buffer: Buffer; mimeType: string; provider: string } | null,
-  apiKey: string
+  settings: AppSettings
 ): Promise<GeneratedImage | null> {
+  const apiKey = settings.geminiApiKey || process.env.GEMINI_API_KEY;
+  if (!apiKey) {
+    addLog("queue", `[Provider:Gemini] Skipped — no API key configured.`);
+    return null;
+  }
+  const baseImg = settings.baseImg ?? null;
   const ai = new GoogleGenAI({
     apiKey,
     httpOptions: { headers: { "User-Agent": "aistudio-build" } }
@@ -791,18 +798,19 @@ async function generateImageWithFallback(
     addLog("queue", `[Provider Chain] Genre "${genre}" (${staticSlug}) — no template, using original prompt`);
   }
 
-  // Provider chain — add new providers here in priority order
+  // Provider chain — add new providers here
+  let genResult = null;
+  let generators: ((p: string, s: AppSettings) => Promise<GeneratedImage | null>)[] = [
+    generateWithCloudflareAI,
+    generateWithPollinations,
+    generateWithHuggingFace,
+  ];
+
   const geminiKey = settings.geminiApiKey || process.env.GEMINI_API_KEY;
   if (geminiKey) {
-    const result = await generateWithGemini(adjustedPrompt, baseImg, geminiKey);
-    if (result) return result.base64Image;
-    addLog("queue", `[Provider Chain] Gemini failed, trying next provider...`);
-  } else {
-    addLog("queue", `[Provider Chain] Gemini skipped — no API key.`);
+    settings.baseImg = baseImg;
+    generators.push(generateWithGemini);
   }
-
-  let genResult = null;
-  let generators = [generateWithPollinations] || [generateWithCloudflareAI, generateWithPollinations, generateWithHuggingFace];
   // placeholder: Replicate
   // placeholder: Stability AI
   // placeholder: OpenAI DALL-E
