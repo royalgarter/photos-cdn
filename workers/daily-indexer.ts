@@ -327,8 +327,8 @@ export function startDailyIndexer(deps: IndexerDeps): IndexerStatus {
 	};
 
 	// Run once at startup (after 30s delay to let server warm up), then every 24h
-	setTimeout(run, 30_000);
-	setInterval(run, INTERVAL_MS);
+	// setTimeout(run, 30_000);
+	// setInterval(run, INTERVAL_MS);
 
 	return status;
 }
