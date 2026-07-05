@@ -1,0 +1,274 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>About — Photos CDN | AI-Powered Image Delivery Platform</title>
+    <meta name="description" content="Photos CDN is an AI-powered image CDN with semantic vector search. Serve images by dimension, category, or natural-language query. On-demand generation with Gemini, Cloudflare AI, and Pollinations." />
+    <meta name="keywords" content="image CDN, AI image generation, semantic image search, vector search, Gemini, Cloudflare R2, WebP, srcset, responsive images, on-demand images" />
+    <meta name="robots" content="index, follow" />
+    <link rel="canonical" href="/about.html" />
+
+    <!-- Open Graph -->
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Photos CDN — AI-Powered Image Delivery Platform" />
+    <meta property="og:description" content="Serve any image by dimensions, category, or natural-language text query. Semantic vector search + on-demand AI generation. Zero-SDK, edge-optimized." />
+    <meta property="og:url" content="/about.html" />
+
+    <!-- Twitter Card -->
+    <meta name="twitter:card" content="summary" />
+    <meta name="twitter:title" content="Photos CDN — AI-Powered Image Delivery Platform" />
+    <meta name="twitter:description" content="Serve any image by dimensions, category, or natural-language text query. Semantic vector search + on-demand AI generation." />
+
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="stylesheet" href="https://cdn.html-first.com/litewind-2.0.1.css" />
+    <script src="https://unpkg.com/lucide@latest"></script>
+
+    <style>
+      .prose h2 { font-size: 1.35rem; font-weight: 700; margin: 2rem 0 0.75rem; color: #111; }
+      .prose h3 { font-size: 1.05rem; font-weight: 600; margin: 1.5rem 0 0.5rem; color: #222; }
+      .prose p  { margin-bottom: 1rem; line-height: 1.75; color: #374151; }
+      .prose ul { margin: 0.75rem 0 1rem 1.25rem; list-style: disc; color: #374151; }
+      .prose ul li { margin-bottom: 0.4rem; line-height: 1.6; }
+      .prose code { background: #f3f4f6; border: 1px solid #e5e7eb; padding: 0.1rem 0.35rem; border-radius: 3px; font-size: 0.85em; color: #1f2937; }
+      .prose pre  { background: #1f2937; color: #e5e7eb; padding: 1rem 1.25rem; border-radius: 0; overflow-x: auto; margin: 1rem 0 1.25rem; font-size: 0.82rem; line-height: 1.6; }
+      .prose pre code { background: none; border: none; padding: 0; color: inherit; font-size: inherit; }
+      .prose table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.85rem; }
+      .prose th { background: #f9fafb; border: 1px solid #e5e7eb; padding: 0.5rem 0.75rem; text-align: left; font-weight: 600; }
+      .prose td { border: 1px solid #e5e7eb; padding: 0.5rem 0.75rem; }
+      .feature-card { background: #fff; border: 1px solid #e5e7eb; padding: 1.5rem; transition: border-color .2s; }
+      .feature-card:hover { border-color: #3b82f6; }
+    </style>
+  </head>
+  <body class="bg-gray-50 text-gray-900 font-sans antialiased">
+
+    <!-- Header -->
+    <header class="border-b border-gray-300 bg-white sticky top-0 z-50 px-6 py-4">
+      <div class="max-w-5xl mx-auto flex items-center justify-between">
+        <a href="/" class="flex items-center gap-3 no-underline">
+          <div class="h-9 w-9 border border-gray-900 bg-white flex items-center justify-center">
+            <i data-lucide="zap" class="h-5 w-5 text-gray-900"></i>
+          </div>
+          <div>
+            <span class="text-base font-bold tracking-tight text-gray-900">Photos CDN</span>
+            <p class="text-xs text-gray-500 leading-none mt-0.5">AI-Powered Image Delivery</p>
+          </div>
+        </a>
+        <nav class="flex items-center gap-4 text-sm">
+          <a href="/" class="text-gray-600 hover:text-gray-900 font-medium">API Playground</a>
+          <a href="/about.html" class="text-blue-600 font-semibold border-b-2 border-blue-600 pb-0.5">About</a>
+          <a href="/privacy.html" class="text-gray-600 hover:text-gray-900 font-medium">Privacy</a>
+          <a href="/terms.html" class="text-gray-600 hover:text-gray-900 font-medium">Terms</a>
+        </nav>
+      </div>
+    </header>
+
+    <!-- Hero -->
+    <section class="bg-white border-b border-gray-200 py-16 px-6">
+      <div class="max-w-5xl mx-auto">
+        <div class="inline-flex items-center gap-2 bg-blue-50 border border-blue-200 px-3 py-1 text-xs font-mono text-blue-700 uppercase tracking-wider mb-6">
+          <i data-lucide="zap" class="h-3 w-3"></i>
+          AI-Powered · Edge-Optimized · Zero-SDK
+        </div>
+        <h1 class="text-4xl font-black tracking-tight text-gray-900 leading-tight mb-4">
+          The Image CDN That Understands<br>What You Mean
+        </h1>
+        <p class="text-lg text-gray-600 max-w-2xl mb-8 leading-relaxed">
+          Photos CDN serves the right image for any prompt — by dimension, category, or plain English. When no match exists, it generates one on demand using AI. No SDK required. One URL does it all.
+        </p>
+        <div class="flex flex-wrap gap-3">
+          <a href="/" class="inline-flex items-center gap-2 bg-blue-600 text-white px-5 py-2.5 text-sm font-semibold hover:bg-blue-700 transition-colors no-underline">
+            <i data-lucide="cpu" class="h-4 w-4"></i>
+            Try the API Playground
+          </a>
+          <a href="#how-it-works" class="inline-flex items-center gap-2 border border-gray-300 text-gray-700 px-5 py-2.5 text-sm font-semibold hover:border-gray-500 transition-colors no-underline">
+            <i data-lucide="book-open" class="h-4 w-4"></i>
+            How It Works
+          </a>
+        </div>
+      </div>
+    </section>
+
+    <!-- Quick-start code block -->
+    <section class="bg-gray-900 py-10 px-6">
+      <div class="max-w-5xl mx-auto">
+        <p class="text-xs font-mono text-gray-400 uppercase tracking-widest mb-3">One URL — that's it</p>
+        <pre class="text-sm text-green-300 font-mono leading-relaxed overflow-x-auto"><code>&lt;img src="https://your-cdn/api/cdn/800/600?text=sunset+over+mountains&amp;output=webp"
+     loading="lazy" alt="Sunset over mountains" /&gt;
+
+&lt;!-- Or fetch a full responsive srcset in one call --&gt;
+GET /api/cdn/srcset?text=sunset+over+mountains&amp;output=webp
+→ { src, srcset, sizes, alt, blurhash, similarity }</code></pre>
+      </div>
+    </section>
+
+    <!-- Feature grid -->
+    <section class="py-14 px-6 bg-gray-50" id="features">
+      <div class="max-w-5xl mx-auto">
+        <h2 class="text-2xl font-bold text-gray-900 mb-2">Why Photos CDN?</h2>
+        <p class="text-gray-500 mb-8 text-sm">Everything you need for image delivery — without the complexity.</p>
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+
+          <div class="feature-card">
+            <i data-lucide="search" class="h-5 w-5 text-blue-600 mb-3"></i>
+            <h3 class="font-semibold text-gray-900 mb-1">Semantic Search</h3>
+            <p class="text-sm text-gray-600 leading-relaxed">128-dimensional Gemini embeddings find the closest matching image in your database via cosine similarity — no rigid tagging required.</p>
+          </div>
+
+          <div class="feature-card">
+            <i data-lucide="sparkles" class="h-5 w-5 text-purple-600 mb-3"></i>
+            <h3 class="font-semibold text-gray-900 mb-1">On-Demand Generation</h3>
+            <p class="text-sm text-gray-600 leading-relaxed">No close match? AI generates a new image using Gemini → Cloudflare AI → Pollinations → HuggingFace in a provider chain. Always delivers.</p>
+          </div>
+
+          <div class="feature-card">
+            <i data-lucide="layout" class="h-5 w-5 text-green-600 mb-3"></i>
+            <h3 class="font-semibold text-gray-900 mb-1">Responsive srcset</h3>
+            <p class="text-sm text-gray-600 leading-relaxed">One endpoint returns a complete <code>srcset</code> across 12 breakpoints — from 150px thumbnail to 3840×2160 4K desktop. Drop it straight into your <code>&lt;img&gt;</code> tag.</p>
+          </div>
+
+          <div class="feature-card">
+            <i data-lucide="image" class="h-5 w-5 text-orange-500 mb-3"></i>
+            <h3 class="font-semibold text-gray-900 mb-1">Format Conversion</h3>
+            <p class="text-sm text-gray-600 leading-relaxed">Request <code>output=webp</code>, <code>output=png</code>, or <code>output=jpg</code> on the fly. WebP saves ~25% over JPEG with no quality loss.</p>
+          </div>
+
+          <div class="feature-card">
+            <i data-lucide="clock" class="h-5 w-5 text-yellow-500 mb-3"></i>
+            <h3 class="font-semibold text-gray-900 mb-1">Async Generation (RFC 7240)</h3>
+            <p class="text-sm text-gray-600 leading-relaxed">Add <code>Prefer: respond-async</code> to never block a page load. Get a fallback image instantly, then poll to upgrade when the AI generation finishes.</p>
+          </div>
+
+          <div class="feature-card">
+            <i data-lucide="database" class="h-5 w-5 text-indigo-500 mb-3"></i>
+            <h3 class="font-semibold text-gray-900 mb-1">ArangoDB Vector Index</h3>
+            <p class="text-sm text-gray-600 leading-relaxed">Powered by ArangoDB <code>APPROX_NEAR_COSINE</code> — a real vector index, not a brute-force scan. Fast similarity search even at scale.</p>
+          </div>
+
+          <div class="feature-card">
+            <i data-lucide="cloud" class="h-5 w-5 text-sky-500 mb-3"></i>
+            <h3 class="font-semibold text-gray-900 mb-1">Cloudflare R2 Storage</h3>
+            <p class="text-sm text-gray-600 leading-relaxed">Generated images are compressed via resmush.it and uploaded to Cloudflare R2 with a public CDN domain. <code>Cache-Control: max-age=31536000</code> on every hit.</p>
+          </div>
+
+          <div class="feature-card">
+            <i data-lucide="tag" class="h-5 w-5 text-pink-500 mb-3"></i>
+            <h3 class="font-semibold text-gray-900 mb-1">Genre-Aware Prompting</h3>
+            <p class="text-sm text-gray-600 leading-relaxed">106 photography genres (astrophotography, fashion, wedding, ruins…) each carry a curated prompt template that enriches the AI generation request automatically.</p>
+          </div>
+
+          <div class="feature-card">
+            <i data-lucide="refresh-cw" class="h-5 w-5 text-teal-500 mb-3"></i>
+            <h3 class="font-semibold text-gray-900 mb-1">Daily Auto-Indexer</h3>
+            <p class="text-sm text-gray-600 leading-relaxed">A background worker fetches curated photos from Pexels, Unsplash, Pixabay, and Picjumbo every 24 hours, embeds them, and grows the DB automatically.</p>
+          </div>
+
+        </div>
+      </div>
+    </section>
+
+    <!-- How it works -->
+    <section class="py-14 px-6 bg-white border-t border-gray-200" id="how-it-works">
+      <div class="max-w-5xl mx-auto prose">
+        <h2>How It Works</h2>
+        <p>Every request goes through a 4-phase pipeline:</p>
+
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-4 not-prose my-6">
+          <div class="border border-gray-200 p-4 bg-gray-50">
+            <div class="text-2xl font-black text-blue-600 mb-1">01</div>
+            <div class="font-semibold text-sm mb-1">Intercept</div>
+            <p class="text-xs text-gray-500">Parse width, height, text, category, seed, format, output from the URL.</p>
+          </div>
+          <div class="border border-gray-200 p-4 bg-gray-50">
+            <div class="text-2xl font-black text-blue-600 mb-1">02</div>
+            <div class="font-semibold text-sm mb-1">Vector Search</div>
+            <p class="text-xs text-gray-500">Embed query via Gemini (128-dim). Cosine search across ArangoDB. Score ≥ 0.85 → serve cached image.</p>
+          </div>
+          <div class="border border-gray-200 p-4 bg-gray-50">
+            <div class="text-2xl font-black text-blue-600 mb-1">03</div>
+            <div class="font-semibold text-sm mb-1">Generate</div>
+            <p class="text-xs text-gray-500">Score &lt; 0.85 → apply genre template → Gemini → Cloudflare AI → Pollinations → HuggingFace. Resize to 12 variants, upload to R2.</p>
+          </div>
+          <div class="border border-gray-200 p-4 bg-gray-50">
+            <div class="text-2xl font-black text-blue-600 mb-1">04</div>
+            <div class="font-semibold text-sm mb-1">Deliver</div>
+            <p class="text-xs text-gray-500">302 redirect to CDN URL for jpg. Sharp-convert for webp/png. Headers carry similarity score and cache directives.</p>
+          </div>
+        </div>
+
+        <h2>API Quick Reference</h2>
+
+        <h3>CDN Image Endpoint</h3>
+        <pre><code>GET /api/cdn/:width/:height?text=...&amp;output=webp&amp;format=image</code></pre>
+
+        <table>
+          <thead><tr><th>Param</th><th>Default</th><th>Description</th></tr></thead>
+          <tbody>
+            <tr><td><code>text</code></td><td>—</td><td>Natural language description for semantic search + generation</td></tr>
+            <tr><td><code>category</code></td><td>nature</td><td>Category filter when no <code>text</code></td></tr>
+            <tr><td><code>seed</code></td><td>42</td><td>Deterministic seed for category-based selection</td></tr>
+            <tr><td><code>format</code></td><td>image</td><td><code>image</code> | <code>blurhash</code> | <code>lqip</code></td></tr>
+            <tr><td><code>output</code></td><td>jpg</td><td><code>jpg</code> | <code>png</code> | <code>webp</code></td></tr>
+          </tbody>
+        </table>
+
+        <h3>srcset Endpoint</h3>
+        <pre><code>GET /api/cdn/srcset?text=sunset+beach&amp;output=webp</code></pre>
+        <p>Returns a JSON payload with <code>src</code>, <code>srcset</code>, <code>sizes</code>, <code>alt</code>, <code>blurhash</code>, and <code>similarity</code> — ready to drop into any <code>&lt;img&gt;</code> tag.</p>
+
+        <h2>Stack</h2>
+        <table>
+          <thead><tr><th>Layer</th><th>Technology</th></tr></thead>
+          <tbody>
+            <tr><td>Server</td><td>Deno 2 + Express (native TypeScript, no build step)</td></tr>
+            <tr><td>Database</td><td>ArangoDB — <code>APPROX_NEAR_COSINE</code> vector index</td></tr>
+            <tr><td>Embeddings</td><td>Gemini <code>gemini-embedding-2</code> — 128-dim, unit-normalized</td></tr>
+            <tr><td>Image Generation</td><td>Gemini → Cloudflare Workers AI → Pollinations.ai → HuggingFace</td></tr>
+            <tr><td>Image Processing</td><td>Jimp (resize to 12 presets) + sharp (format conversion)</td></tr>
+            <tr><td>Compression</td><td>resmush.it API (82% quality)</td></tr>
+            <tr><td>Object Storage</td><td>Cloudflare R2 (S3-compatible)</td></tr>
+            <tr><td>Frontend</td><td>Alpine.js + Lucide icons</td></tr>
+          </tbody>
+        </table>
+
+        <h2>Image Variants</h2>
+        <p>Every image is generated at 12 preset resolutions, from 150×150 thumbnail to 3840×2160 4K. The server selects the closest variant to the requested dimensions:</p>
+        <ul>
+          <li>desktop_4k — 3840×2160</li>
+          <li>desktop_1440p — 2560×1440</li>
+          <li>desktop_1080p — 1920×1080</li>
+          <li>desktop_budget — 1366×768</li>
+          <li>tablet_wide — 1280×800</li>
+          <li>tablet_standard — 768×1024</li>
+          <li>mobile_large — 412×915</li>
+          <li>mobile_medium — 390×844</li>
+          <li>mobile_standard — 360×800</li>
+          <li>original — 1024×1024</li>
+          <li>medium — 400×400</li>
+          <li>thumbnail — 150×150</li>
+        </ul>
+      </div>
+    </section>
+
+    <!-- Footer -->
+    <footer class="border-t border-gray-200 bg-white py-8 px-6 mt-auto">
+      <div class="max-w-5xl mx-auto flex flex-col md:flex-row items-center justify-between gap-4 text-sm text-gray-500">
+        <div class="flex items-center gap-2">
+          <i data-lucide="zap" class="h-4 w-4 text-gray-400"></i>
+          <span>Photos CDN — AI-Powered Image Delivery Platform</span>
+        </div>
+        <div class="flex items-center gap-5">
+          <a href="/" class="hover:text-gray-900 transition-colors">API Playground</a>
+          <a href="/about.html" class="text-blue-600 font-medium">About</a>
+          <a href="/privacy.html" class="hover:text-gray-900 transition-colors">Privacy Policy</a>
+          <a href="/terms.html" class="hover:text-gray-900 transition-colors">Terms of Service</a>
+        </div>
+      </div>
+    </footer>
+
+    <script>
+      lucide.createIcons();
+    </script>
+  </body>
+</html>

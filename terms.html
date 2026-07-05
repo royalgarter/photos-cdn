@@ -1,0 +1,154 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Terms of Service — Photos CDN</title>
+    <meta name="description" content="Terms of Service for Photos CDN. Read the rules and conditions for using our AI-powered image delivery API." />
+    <meta name="robots" content="index, follow" />
+    <link rel="canonical" href="/terms.html" />
+
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="stylesheet" href="https://cdn.html-first.com/litewind-2.0.1.css" />
+    <script src="https://unpkg.com/lucide@latest"></script>
+
+    <style>
+      .prose h2 { font-size: 1.25rem; font-weight: 700; margin: 2.5rem 0 0.75rem; color: #111; border-top: 1px solid #e5e7eb; padding-top: 1.5rem; }
+      .prose h2:first-of-type { border-top: none; padding-top: 0; margin-top: 0; }
+      .prose p  { margin-bottom: 1rem; line-height: 1.75; color: #374151; }
+      .prose ul { margin: 0.75rem 0 1rem 1.25rem; list-style: disc; color: #374151; }
+      .prose ul li { margin-bottom: 0.4rem; line-height: 1.6; }
+      .prose code { background: #f3f4f6; border: 1px solid #e5e7eb; padding: 0.1rem 0.35rem; border-radius: 3px; font-size: 0.85em; color: #1f2937; }
+      .prose a { color: #2563eb; text-decoration: underline; }
+    </style>
+  </head>
+  <body class="bg-gray-50 text-gray-900 font-sans antialiased">
+
+    <!-- Header -->
+    <header class="border-b border-gray-300 bg-white sticky top-0 z-50 px-6 py-4">
+      <div class="max-w-3xl mx-auto flex items-center justify-between">
+        <a href="/" class="flex items-center gap-3 no-underline">
+          <div class="h-9 w-9 border border-gray-900 bg-white flex items-center justify-center">
+            <i data-lucide="zap" class="h-5 w-5 text-gray-900"></i>
+          </div>
+          <span class="text-base font-bold tracking-tight text-gray-900">Photos CDN</span>
+        </a>
+        <nav class="flex items-center gap-4 text-sm">
+          <a href="/" class="text-gray-600 hover:text-gray-900 font-medium">API Playground</a>
+          <a href="/about.html" class="text-gray-600 hover:text-gray-900 font-medium">About</a>
+          <a href="/privacy.html" class="text-gray-600 hover:text-gray-900 font-medium">Privacy</a>
+          <a href="/terms.html" class="text-blue-600 font-semibold border-b-2 border-blue-600 pb-0.5">Terms</a>
+        </nav>
+      </div>
+    </header>
+
+    <!-- Content -->
+    <main class="max-w-3xl mx-auto px-6 py-12">
+      <div class="mb-8">
+        <h1 class="text-3xl font-black text-gray-900 mb-2">Terms of Service</h1>
+        <p class="text-sm text-gray-500">Last updated: July 5, 2026</p>
+      </div>
+
+      <div class="bg-amber-50 border border-amber-200 p-4 mb-8 text-sm text-amber-800">
+        <strong>Notice:</strong> By using Photos CDN you agree to these terms. Please read them carefully before making API requests or embedding images served by this platform.
+      </div>
+
+      <article class="prose">
+
+        <h2>1. Acceptance of Terms</h2>
+        <p>By accessing or using Photos CDN ("the Service"), you agree to be bound by these Terms of Service. If you do not agree, do not use the Service. These terms apply to all users, including API consumers, developers, and visitors to the web playground.</p>
+
+        <h2>2. Description of Service</h2>
+        <p>Photos CDN provides an AI-powered image delivery API. The Service:</p>
+        <ul>
+          <li>Accepts natural-language text queries and returns semantically matched images</li>
+          <li>Generates new images on demand when no close match exists in the database</li>
+          <li>Resizes and converts images to multiple formats and resolutions</li>
+          <li>Provides responsive <code>srcset</code> payloads for use in web applications</li>
+        </ul>
+        <p>The Service is provided "as-is" and may be modified, suspended, or discontinued at any time without prior notice.</p>
+
+        <h2>3. Permitted Use</h2>
+        <p>You may use the Service for lawful purposes only. Permitted uses include:</p>
+        <ul>
+          <li>Embedding images in websites, apps, or digital products</li>
+          <li>Prototyping and development projects</li>
+          <li>Non-commercial personal projects</li>
+          <li>Commercial projects, subject to the restrictions below</li>
+        </ul>
+
+        <h2>4. Prohibited Use</h2>
+        <p>You must not use the Service to:</p>
+        <ul>
+          <li>Generate, store, or distribute illegal content, including CSAM or content that incites violence</li>
+          <li>Attempt to circumvent, disable, or interfere with security features of the Service</li>
+          <li>Deliberately send queries designed to produce misleading, defamatory, or harmful images</li>
+          <li>Scrape or mass-download images from the CDN in ways that violate third-party stock photo licenses</li>
+          <li>Reverse-engineer the vector embeddings or model weights underlying the Service</li>
+          <li>Resell or sub-license API access without permission</li>
+          <li>Send requests at volumes that constitute a denial-of-service attack</li>
+        </ul>
+
+        <h2>5. Image Rights and Licensing</h2>
+        <p>Images served by the Service may come from one of two sources:</p>
+        <ul>
+          <li><strong>Stock photo providers</strong> (Pexels, Unsplash, Pixabay, Picjumbo) — these images are subject to each provider's license. Generally they are free for commercial use with attribution; consult the respective provider's license terms before commercial use.</li>
+          <li><strong>AI-generated images</strong> — images generated on demand are produced by third-party AI models (Gemini, Cloudflare AI, Pollinations, HuggingFace). Copyright status of AI-generated images varies by jurisdiction. You assume all responsibility for ensuring your use of AI-generated images complies with applicable law.</li>
+        </ul>
+        <p>We make no warranty that any image served is free of third-party intellectual property claims.</p>
+
+        <h2>6. API Keys and Credentials</h2>
+        <p>If you configure API keys in the Settings panel (e.g., Gemini, Cloudflare, HuggingFace keys), you are responsible for keeping those credentials secure. We are not liable for unauthorized use of credentials stored through the Service. You may remove your credentials at any time via the Settings panel.</p>
+
+        <h2>7. Rate Limits and Fair Use</h2>
+        <p>The Service is shared infrastructure. You agree to use it in a manner that does not degrade performance for other users. We reserve the right to throttle or block access for any user or IP address making excessive requests without prior notice.</p>
+
+        <h2>8. Disclaimer of Warranties</h2>
+        <p>THE SERVICE IS PROVIDED "AS IS" WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE, OR NON-INFRINGEMENT. We do not warrant that:</p>
+        <ul>
+          <li>The Service will be uninterrupted, error-free, or available at any specific time</li>
+          <li>Results from AI image generation will be accurate, appropriate, or suitable for your use case</li>
+          <li>Images generated will be free of intellectual property claims from third parties</li>
+        </ul>
+
+        <h2>9. Limitation of Liability</h2>
+        <p>TO THE MAXIMUM EXTENT PERMITTED BY APPLICABLE LAW, WE SHALL NOT BE LIABLE FOR ANY INDIRECT, INCIDENTAL, SPECIAL, CONSEQUENTIAL, OR PUNITIVE DAMAGES ARISING FROM YOUR USE OF THE SERVICE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGES. Our total liability for any claim arising out of these terms shall not exceed the amount you paid us in the 12 months preceding the claim (or $0 if the Service was provided free of charge).</p>
+
+        <h2>10. Indemnification</h2>
+        <p>You agree to indemnify and hold harmless Photos CDN, its operators, and contributors from and against any claims, damages, losses, and expenses (including legal fees) arising out of your use of the Service, your violation of these Terms, or your violation of any third-party rights.</p>
+
+        <h2>11. Third-Party Services</h2>
+        <p>The Service relies on third-party APIs (Google Gemini, Cloudflare, HuggingFace, Pexels, Unsplash, etc.). We are not responsible for the availability, accuracy, or policies of those services. Outages or policy changes by those providers may affect the Service.</p>
+
+        <h2>12. Modifications to Terms</h2>
+        <p>We may revise these Terms at any time. The "Last updated" date at the top indicates the most recent revision. Continued use of the Service after changes constitutes your acceptance of the updated Terms.</p>
+
+        <h2>13. Governing Law</h2>
+        <p>These Terms shall be governed by and construed in accordance with applicable law, without regard to its conflict-of-law provisions.</p>
+
+        <h2>14. Contact</h2>
+        <p>Questions about these Terms? Reach us via the project repository or service contact details in <code>metadata.json</code>.</p>
+
+      </article>
+    </main>
+
+    <!-- Footer -->
+    <footer class="border-t border-gray-200 bg-white py-8 px-6 mt-8">
+      <div class="max-w-3xl mx-auto flex flex-col md:flex-row items-center justify-between gap-4 text-sm text-gray-500">
+        <div class="flex items-center gap-2">
+          <i data-lucide="zap" class="h-4 w-4 text-gray-400"></i>
+          <span>Photos CDN — AI-Powered Image Delivery Platform</span>
+        </div>
+        <div class="flex items-center gap-5">
+          <a href="/" class="hover:text-gray-900 transition-colors">API Playground</a>
+          <a href="/about.html" class="hover:text-gray-900 transition-colors">About</a>
+          <a href="/privacy.html" class="hover:text-gray-900 transition-colors">Privacy Policy</a>
+          <a href="/terms.html" class="text-blue-600 font-medium">Terms of Service</a>
+        </div>
+      </div>
+    </footer>
+
+    <script>lucide.createIcons();</script>
+  </body>
+</html>

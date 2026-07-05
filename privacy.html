@@ -1,0 +1,143 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Privacy Policy — Photos CDN</title>
+    <meta name="description" content="Privacy Policy for Photos CDN. Learn how we collect, use, and protect data when you use our AI-powered image delivery service." />
+    <meta name="robots" content="index, follow" />
+    <link rel="canonical" href="/privacy.html" />
+
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="stylesheet" href="https://cdn.html-first.com/litewind-2.0.1.css" />
+    <script src="https://unpkg.com/lucide@latest"></script>
+
+    <style>
+      .prose h2 { font-size: 1.25rem; font-weight: 700; margin: 2.5rem 0 0.75rem; color: #111; border-top: 1px solid #e5e7eb; padding-top: 1.5rem; }
+      .prose h2:first-of-type { border-top: none; padding-top: 0; margin-top: 0; }
+      .prose p  { margin-bottom: 1rem; line-height: 1.75; color: #374151; }
+      .prose ul { margin: 0.75rem 0 1rem 1.25rem; list-style: disc; color: #374151; }
+      .prose ul li { margin-bottom: 0.4rem; line-height: 1.6; }
+      .prose code { background: #f3f4f6; border: 1px solid #e5e7eb; padding: 0.1rem 0.35rem; border-radius: 3px; font-size: 0.85em; color: #1f2937; }
+      .prose a { color: #2563eb; text-decoration: underline; }
+    </style>
+  </head>
+  <body class="bg-gray-50 text-gray-900 font-sans antialiased">
+
+    <!-- Header -->
+    <header class="border-b border-gray-300 bg-white sticky top-0 z-50 px-6 py-4">
+      <div class="max-w-3xl mx-auto flex items-center justify-between">
+        <a href="/" class="flex items-center gap-3 no-underline">
+          <div class="h-9 w-9 border border-gray-900 bg-white flex items-center justify-center">
+            <i data-lucide="zap" class="h-5 w-5 text-gray-900"></i>
+          </div>
+          <span class="text-base font-bold tracking-tight text-gray-900">Photos CDN</span>
+        </a>
+        <nav class="flex items-center gap-4 text-sm">
+          <a href="/" class="text-gray-600 hover:text-gray-900 font-medium">API Playground</a>
+          <a href="/about.html" class="text-gray-600 hover:text-gray-900 font-medium">About</a>
+          <a href="/privacy.html" class="text-blue-600 font-semibold border-b-2 border-blue-600 pb-0.5">Privacy</a>
+          <a href="/terms.html" class="text-gray-600 hover:text-gray-900 font-medium">Terms</a>
+        </nav>
+      </div>
+    </header>
+
+    <!-- Content -->
+    <main class="max-w-3xl mx-auto px-6 py-12">
+      <div class="mb-8">
+        <h1 class="text-3xl font-black text-gray-900 mb-2">Privacy Policy</h1>
+        <p class="text-sm text-gray-500">Last updated: July 5, 2026</p>
+      </div>
+
+      <div class="bg-blue-50 border border-blue-200 p-4 mb-8 text-sm text-blue-800">
+        <strong>Summary:</strong> Photos CDN processes text queries and image data to deliver images. We do not sell personal data. Query strings sent to the API may be stored in server logs for operational purposes.
+      </div>
+
+      <article class="prose">
+
+        <h2>1. Who We Are</h2>
+        <p>Photos CDN ("we", "our", "the Service") is an AI-powered image delivery platform. This Privacy Policy explains what data we collect when you use our API or web interface, how we use it, and your rights regarding that data.</p>
+
+        <h2>2. What Data We Collect</h2>
+        <p>When you use the Photos CDN API or web playground, we may collect the following:</p>
+        <ul>
+          <li><strong>Query text</strong> — the <code>text=</code> parameter you send with API requests (e.g., "sunset over mountains")</li>
+          <li><strong>Request metadata</strong> — IP address, HTTP method, URL path, response code, timestamp, and user-agent string</li>
+          <li><strong>Generated images</strong> — AI-generated images are stored in our ArangoDB database and Cloudflare R2 object storage alongside their embedding vectors and source metadata</li>
+          <li><strong>Settings</strong> — if you configure API keys via the Settings panel (localhost only), those credentials are stored in ArangoDB encrypted at rest</li>
+        </ul>
+        <p>We do not collect names, email addresses, payment information, or any personally identifiable information unless you explicitly provide it.</p>
+
+        <h2>3. How We Use Your Data</h2>
+        <ul>
+          <li>To fulfill API requests — embedding your query, searching the database, generating images</li>
+          <li>To improve search relevance — stored images and their embeddings improve the quality of future vector searches</li>
+          <li>For operational monitoring — server logs help diagnose errors and monitor system health</li>
+          <li>To comply with legal obligations</li>
+        </ul>
+        <p>We do not use query text to train AI models directly. Query text is passed to third-party AI providers (Gemini, Cloudflare Workers AI, Pollinations.ai, HuggingFace) to generate image embeddings or images; those providers have their own privacy policies.</p>
+
+        <h2>4. Third-Party Services</h2>
+        <p>The Service integrates with the following third-party providers. Each may process query text or images according to their own terms:</p>
+        <ul>
+          <li><strong>Google Gemini</strong> — embeddings and image generation (<a href="https://policies.google.com/privacy" target="_blank" rel="noopener">Google Privacy Policy</a>)</li>
+          <li><strong>Cloudflare Workers AI &amp; R2</strong> — image generation and object storage (<a href="https://www.cloudflare.com/privacypolicy/" target="_blank" rel="noopener">Cloudflare Privacy Policy</a>)</li>
+          <li><strong>Pollinations.ai</strong> — free-tier image generation</li>
+          <li><strong>HuggingFace</strong> — fallback image generation (<a href="https://huggingface.co/privacy" target="_blank" rel="noopener">HuggingFace Privacy Policy</a>)</li>
+          <li><strong>Pexels, Unsplash, Pixabay</strong> — stock photo indexing via their public APIs</li>
+        </ul>
+
+        <h2>5. Data Retention</h2>
+        <ul>
+          <li><strong>Server logs</strong> — retained for up to 30 days for operational purposes, then purged</li>
+          <li><strong>Generated images</strong> — stored indefinitely unless you request deletion or the database is reset</li>
+          <li><strong>API keys stored in Settings</strong> — retained until you update or delete them via the Settings panel</li>
+        </ul>
+
+        <h2>6. Cookies and Tracking</h2>
+        <p>The Photos CDN web interface does not use tracking cookies, analytics scripts, or third-party advertising. The only client-side scripts are Alpine.js (UI reactivity) and Lucide Icons (SVG icons), neither of which sends data to external servers.</p>
+
+        <h2>7. Data Security</h2>
+        <p>We use industry-standard practices to protect data in transit (HTTPS/TLS) and at rest (ArangoDB and Cloudflare R2 encryption). No method of transmission or storage is 100% secure; we cannot guarantee absolute security.</p>
+
+        <h2>8. Your Rights</h2>
+        <p>Depending on your jurisdiction, you may have the right to:</p>
+        <ul>
+          <li>Request deletion of images or logs generated from your API calls</li>
+          <li>Request a copy of data associated with your use of the service</li>
+          <li>Object to processing of your data</li>
+        </ul>
+        <p>To exercise these rights, contact us using the information below.</p>
+
+        <h2>9. Children's Privacy</h2>
+        <p>The Service is not directed at children under 13. We do not knowingly collect personal information from children. If you believe a child has provided us with personal data, please contact us and we will delete it promptly.</p>
+
+        <h2>10. Changes to This Policy</h2>
+        <p>We may update this Privacy Policy from time to time. The "Last updated" date at the top of this page reflects the most recent revision. Continued use of the Service after changes constitutes acceptance of the updated policy.</p>
+
+        <h2>11. Contact</h2>
+        <p>Questions about this Privacy Policy? Reach us at the project repository or via the contact details in the service metadata.</p>
+
+      </article>
+    </main>
+
+    <!-- Footer -->
+    <footer class="border-t border-gray-200 bg-white py-8 px-6 mt-8">
+      <div class="max-w-3xl mx-auto flex flex-col md:flex-row items-center justify-between gap-4 text-sm text-gray-500">
+        <div class="flex items-center gap-2">
+          <i data-lucide="zap" class="h-4 w-4 text-gray-400"></i>
+          <span>Photos CDN — AI-Powered Image Delivery Platform</span>
+        </div>
+        <div class="flex items-center gap-5">
+          <a href="/" class="hover:text-gray-900 transition-colors">API Playground</a>
+          <a href="/about.html" class="hover:text-gray-900 transition-colors">About</a>
+          <a href="/privacy.html" class="text-blue-600 font-medium">Privacy Policy</a>
+          <a href="/terms.html" class="hover:text-gray-900 transition-colors">Terms of Service</a>
+        </div>
+      </div>
+    </footer>
+
+    <script>lucide.createIcons();</script>
+  </body>
+</html>
