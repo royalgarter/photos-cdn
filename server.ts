@@ -10,6 +10,7 @@ import { UnsplashProvider } from "./providers/unsplash.ts";
 import { PicsumProvider } from "./providers/picsum.ts";
 import { WallhavenProvider } from "./providers/wallhaven.ts";
 import { OpenverseProvider } from "./providers/openverse.ts";
+import { BingProvider, WikimediaProvider, FlickrPublicProvider } from "./providers/free-providers.ts";
 import type { FallbackProvider } from "./providers/types.ts";
 import { GENRES } from "./providers/types.ts";
 import { startDailyIndexer, runDailyIndexer, type IndexerStatus } from "./workers/daily-indexer.ts";
@@ -566,6 +567,10 @@ const FALLBACK_CHAIN: FallbackProvider[] = [
     async () => { const s = await getSettings().catch(() => ({} as any)); return s.openverseClientId || process.env.OPENVERSE_CLIENT_ID; },
     async () => { const s = await getSettings().catch(() => ({} as any)); return s.openverseClientSecret || process.env.OPENVERSE_CLIENT_SECRET; }
   ),
+  // No-auth free providers
+  new BingProvider(),
+  new WikimediaProvider(),
+  new FlickrPublicProvider(),
   // Static.photos — no key, category-mapped
   new StaticPhotosProvider(),
   // Keyless deterministic fallbacks

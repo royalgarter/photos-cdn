@@ -11,14 +11,15 @@
 - [x] 7. Cloudflare edge cache headers — `Vary: Accept`, `ETag`, `X-Image-Key` for CDN-aware caching
 
 ## Providers
-- https://commons.wikimedia.org/wiki/Main_Page?ref=journalism.co.uk
-- https://www.flickr.com/services/api/
-- https://www.bing.com/HPImageArchive.aspx?format=js&idx=0&n=100&mkt=en-US
-- https://www.shopify.com/stock-photos/free-images
-- https://www.lifeofpix.com/
-- https://stocksnap.io/
-- https://kaboompics.com/
-- https://freestocks.org/
+- [x] https://www.bing.com/HPImageArchive.aspx — no auth, 16 daily editorial photos 1920x1080
+- [x] https://commons.wikimedia.org/wiki/Main_Page — no auth, CC-licensed, 1200px+ quality images
+- [x] https://www.flickr.com/services/feeds/photos_public.gne — no auth, public feed with _b suffix for 1024px
+- [ ] https://www.flickr.com/services/api/ — API key for full search (register at flickr.com/services/apps/create)
+- [ ] https://www.shopify.com/stock-photos/free-images — Burst by Shopify, no API found (301 redirect)
+- [ ] https://www.lifeofpix.com/ — no API, JS-rendered only
+- [ ] https://stocksnap.io/ — API returns 403
+- [ ] https://kaboompics.com/ — no public API
+- [ ] https://freestocks.org/ — no public API
 
 
 ## AI Generator
