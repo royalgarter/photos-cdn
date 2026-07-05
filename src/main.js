@@ -168,6 +168,9 @@ const registerAppState = () => {
     srcsetPollUrl: null,
     srcsetPollTimer: null,
 
+    // Admin auth state
+    isAdmin: false,
+
     // Navigation tab
     activeTab: "sandbox",
 
@@ -193,14 +196,19 @@ const registerAppState = () => {
 
     // Lifecycle Init
     init() {
-      this.fetchImages();
-      this.fetchQueue();
-      this.fetchLogs();
-      this.fetchSettings();
+      this.checkAuth().then(() => {
+        if (this.isAdmin) {
+          this.fetchImages();
+          this.fetchQueue();
+          this.fetchLogs();
+          this.fetchSettings();
+        }
+      });
       this.fetchGenres();
 
-      // Background Poll
+      // Background Poll (admin only)
       setInterval(() => {
+        if (!this.isAdmin) return;
         this.fetchQueue();
         this.fetchLogs();
         this.fetchImages();
@@ -238,6 +246,16 @@ const registerAppState = () => {
           renderIcons();
         });
       });
+    },
+
+    // Check admin authentication status
+    async checkAuth() {
+      try {
+        const res = await fetch("/api/auth/check");
+        this.isAdmin = res.ok;
+      } catch(e) {
+        this.isAdmin = false;
+      }
     },
 
     // srcset endpoint tester

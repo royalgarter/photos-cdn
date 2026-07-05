@@ -55,6 +55,7 @@
             >
               <i data-lucide="database" class="h-3.5 w-3.5"></i>
               ArangoDB Vector
+              <i x-show="!isAdmin" data-lucide="lock" class="h-3 w-3 text-gray-400"></i>
             </button>
             <button
               @click="activeTab = 'queue'"
@@ -63,7 +64,8 @@
             >
               <i data-lucide="layers" class="h-3.5 w-3.5"></i>
               ArangoDB Queue
-              <span x-show="activeQueueCount > 0" class="absolute top-1 right-1 h-1.5 w-1.5 bg-yellow-500"></span>
+              <i x-show="!isAdmin" data-lucide="lock" class="h-3 w-3 text-gray-400"></i>
+              <span x-show="isAdmin && activeQueueCount > 0" class="absolute top-1 right-1 h-1.5 w-1.5 bg-yellow-500"></span>
             </button>
             <button
               @click="activeTab = 'srcset'"
@@ -74,13 +76,13 @@
               srcset / Async
             </button>
             <button
-              x-show="window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'"
               @click="activeTab = 'settings'"
               class="flex items-center gap-2 px-4 py-2 text-xs font-medium transition-colors"
               :class="activeTab === 'settings' ? 'bg-blue-600 text-white border border-blue-600 font-bold' : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'"
             >
               <i data-lucide="settings" class="h-3.5 w-3.5"></i>
               System Settings
+              <i x-show="!isAdmin" data-lucide="lock" class="h-3 w-3 text-gray-400"></i>
             </button>
             <a
               href="/about.html"
@@ -228,7 +230,8 @@
                     <i data-lucide="cpu" class="h-4 w-4 text-blue-500"></i>
                     Dynamic Request Sandbox
                   </h2>
-                  <button 
+                  <button
+                    x-show="isAdmin"
                     @click="handleReset()"
                     class="text-xs text-gray-600 hover:text-red-500 flex items-center gap-1.5 bg-white border border-gray-300 hover:border-red-500 px-3 py-1.5 transition-colors cursor-pointer"
                   >
@@ -591,7 +594,15 @@
 
             <!-- TAB: DATABASE / VECTOR STORE -->
             <div x-show="activeTab === 'database'" class="space-y-6" x-transition>
-              <div class="bg-white border border-gray-300 p-6">
+              <!-- Auth lock -->
+              <template x-if="!isAdmin">
+                <div class="bg-white border border-gray-300 p-12 flex flex-col items-center justify-center gap-4 text-center">
+                  <i data-lucide="lock" class="h-10 w-10 text-gray-400"></i>
+                  <h3 class="text-sm font-bold text-gray-700">Admin Access Required</h3>
+                  <p class="text-xs text-gray-500 max-w-sm">Append <code class="bg-gray-100 text-blue-600 px-1 font-mono">?key=ADMIN_KEY</code> to the URL to authenticate this session.</p>
+                </div>
+              </template>
+              <div x-show="isAdmin" class="bg-white border border-gray-300 p-6">
                 <!-- Header info -->
                 <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6 pb-4 border-b border-gray-300">
                   <div>
@@ -749,11 +760,18 @@
                 </div>
 
               </div>
-            </div>
+            </div><!-- end database tab -->
 
             <!-- TAB: ARANGODB QUEUES -->
             <div x-show="activeTab === 'queue'" class="space-y-6" x-transition>
-              <div class="bg-white border border-gray-300 p-6">
+              <template x-if="!isAdmin">
+                <div class="bg-white border border-gray-300 p-12 flex flex-col items-center justify-center gap-4 text-center">
+                  <i data-lucide="lock" class="h-10 w-10 text-gray-400"></i>
+                  <h3 class="text-sm font-bold text-gray-700">Admin Access Required</h3>
+                  <p class="text-xs text-gray-500 max-w-sm">Append <code class="bg-gray-100 text-blue-600 px-1 font-mono">?key=ADMIN_KEY</code> to the URL to authenticate this session.</p>
+                </div>
+              </template>
+              <div x-show="isAdmin" class="bg-white border border-gray-300 p-6">
                 <h2 class="text-sm font-bold text-gray-900 mb-2 flex items-center gap-2">
                   <i data-lucide="layers" class="h-4 w-4 text-blue-500"></i>
                   ArangoDB: Native DB-Backed Queue Engine
@@ -811,7 +829,7 @@
                 </div>
 
               </div>
-            </div>
+            </div><!-- end queue tab -->
 
             <!-- TAB: SRCSET & ASYNC -->
             <div x-show="activeTab === 'srcset'" class="space-y-6" x-transition>
@@ -965,8 +983,15 @@ if (res.status === 202) {
             </div>
 
             <!-- TAB: SYSTEM SETTINGS -->
-            <div x-show="activeTab === 'settings' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')" class="space-y-6" x-transition>
-              <div class="bg-white border border-gray-300 p-6 space-y-6">
+            <div x-show="activeTab === 'settings'" class="space-y-6" x-transition>
+              <template x-if="!isAdmin">
+                <div class="bg-white border border-gray-300 p-12 flex flex-col items-center justify-center gap-4 text-center">
+                  <i data-lucide="lock" class="h-10 w-10 text-gray-400"></i>
+                  <h3 class="text-sm font-bold text-gray-700">Admin Access Required</h3>
+                  <p class="text-xs text-gray-500 max-w-sm">Append <code class="bg-gray-100 text-blue-600 px-1 font-mono">?key=ADMIN_KEY</code> to the URL to authenticate this session.</p>
+                </div>
+              </template>
+              <div x-show="isAdmin" class="bg-white border border-gray-300 p-6 space-y-6">
                 <div>
                   <h2 class="text-sm font-bold text-gray-900 flex items-center gap-2">
                     <i data-lucide="settings" class="h-4 w-4 text-blue-500"></i>
@@ -1266,23 +1291,34 @@ if (res.status === 202) {
                   <i data-lucide="terminal" class="h-3.5 w-3.5 text-blue-500"></i>
                   Live Output Logs
                 </h3>
-                <span class="text-xs text-gray-500 font-normal">Auto-scrolling</span>
+                <span class="text-xs text-gray-500 font-normal" x-show="isAdmin">Auto-scrolling</span>
+                <span class="text-xs text-gray-400 font-mono flex items-center gap-1" x-show="!isAdmin">
+                  <i data-lucide="lock" class="h-3 w-3"></i> locked
+                </span>
               </div>
 
               <div class="flex-1 overflow-y-auto space-y-2.5 pr-2 text-xs select-text">
-                <div x-show="logs.length === 0" class="text-gray-500 italic h-full flex items-center justify-center text-center p-4">
+                <div x-show="!isAdmin" class="text-gray-400 italic h-full flex flex-col items-center justify-center text-center p-4 gap-2">
+                  <i data-lucide="lock" class="h-6 w-6 text-gray-300"></i>
+                  <span>Authenticate to view logs</span>
+                </div>
+                <div x-show="isAdmin && logs.length === 0" class="text-gray-500 italic h-full flex items-center justify-center text-center p-4">
                   Waiting for pipeline requests...
                 </div>
-                <template x-for="log in logs" :key="log.id">
-                  <div class="border-b border-gray-200 pb-2 hover:bg-gray-50 transition-colors">
-                    <div class="flex items-center justify-between text-xs text-gray-500 mb-0.5">
-                      <span x-text="'[' + log.timestamp + ']'"></span>
-                      <span class="font-bold uppercase tracking-wider text-xs" 
-                        :class="log.type === 'api' ? 'text-green-600' : (log.type === 'queue' ? 'text-yellow-600' : 'text-gray-500')"
-                        x-text="log.type"
-                      ></span>
-                    </div>
-                    <p class="text-gray-800 leading-relaxed break-all text-xs" x-text="log.message"></p>
+                <template x-if="isAdmin">
+                  <div>
+                    <template x-for="log in logs" :key="log.id">
+                      <div class="border-b border-gray-200 pb-2 hover:bg-gray-50 transition-colors">
+                        <div class="flex items-center justify-between text-xs text-gray-500 mb-0.5">
+                          <span x-text="'[' + log.timestamp + ']'"></span>
+                          <span class="font-bold uppercase tracking-wider text-xs"
+                            :class="log.type === 'api' ? 'text-green-600' : (log.type === 'queue' ? 'text-yellow-600' : 'text-gray-500')"
+                            x-text="log.type"
+                          ></span>
+                        </div>
+                        <p class="text-gray-800 leading-relaxed break-all text-xs" x-text="log.message"></p>
+                      </div>
+                    </template>
                   </div>
                 </template>
               </div>
