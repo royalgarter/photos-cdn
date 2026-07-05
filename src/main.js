@@ -151,6 +151,10 @@ const registerAppState = () => {
     },
     settingsSavedMessage: false,
 
+    // Genre picker
+    genres: [],
+    selectedGenre: "",
+
     // Live test result
     testResult: null,
 
@@ -191,6 +195,7 @@ const registerAppState = () => {
       this.fetchQueue();
       this.fetchLogs();
       this.fetchSettings();
+      this.fetchGenres();
 
       // Background Poll
       setInterval(() => {
@@ -277,6 +282,21 @@ const registerAppState = () => {
     },
 
     // Fetch Images API
+    async fetchGenres() {
+      try {
+        const res = await fetch("/api/genres");
+        if (res.ok) this.genres = await res.json();
+      } catch(e) {}
+    },
+
+    applyGenre(slug) {
+      this.selectedGenre = slug;
+      const g = this.genres.find(g => g.slug === slug);
+      if (g && g.keywords.length) {
+        this.text = g.keywords.slice(0, 3).join(" ");
+      }
+    },
+
     async fetchImages() {
       try {
         const res = await fetch("/api/images");
@@ -355,6 +375,8 @@ const registerAppState = () => {
         const similarity = similarityHeader ? parseFloat(similarityHeader) : 1.0;
         const isAsync = res.headers.get("X-Async-Generated") === "true";
         const cacheControl = res.headers.get("Cache-Control") || "None";
+        const genre = res.headers.get("X-Genre") || "";
+        const genreSlug = res.headers.get("X-Genre-Slug") || "";
 
         if (isAsync) {
           setTimeout(() => { this.activeStep = 3; }, 700);
@@ -395,7 +417,9 @@ const registerAppState = () => {
           isAsync,
           duration,
           blurhash: blurhashStr,
-          matchedImage
+          matchedImage,
+          genre,
+          genreSlug,
         };
 
         // Render blurhash canvas if present

@@ -10,6 +10,7 @@ import { UnsplashProvider } from "./providers/unsplash.ts";
 import { PicsumProvider } from "./providers/picsum.ts";
 import { WallhavenProvider } from "./providers/wallhaven.ts";
 import type { FallbackProvider } from "./providers/types.ts";
+import { GENRES } from "./providers/types.ts";
 import { startDailyIndexer, runDailyIndexer, type IndexerStatus } from "./workers/daily-indexer.ts";
 
 const app = express();
@@ -995,6 +996,10 @@ app.post("/api/reset", async (req, res) => {
 });
 
 // Get Database Items
+app.get("/api/genres", (_req, res) => {
+  res.json(GENRES.map(g => ({ slug: g.slug, staticSlug: g.staticSlug, keywords: g.keywords.slice(0, 5) })));
+});
+
 app.get("/api/images", async (req, res) => {
   const images = await getImages();
   res.json(images);
@@ -1152,6 +1157,11 @@ app.get("/api/cdn/:width/:height", async (req, res) => {
     res.setHeader("X-Similarity-Score", similarityScore.toString());
     res.setHeader("X-Async-Generated", triggerGeneration ? "true" : "false");
     res.setHeader("X-Image-Key", finalImage._key);
+    if (textQuery) {
+      const { genre, staticSlug: gSlug } = matchGenre(textQuery);
+      res.setHeader("X-Genre", genre);
+      res.setHeader("X-Genre-Slug", gSlug);
+    }
     if (isFallback) setFallbackHeaders(res, provider, similarityScore, timedOut);
 
     if (format === "blurhash") {

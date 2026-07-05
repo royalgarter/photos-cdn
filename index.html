@@ -258,6 +258,27 @@
                   <!-- Inputs Grid -->
                   <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                     
+                    <!-- Genre Picker -->
+                    <div class="md:col-span-2">
+                      <label class="text-xs font-semibold text-gray-700 block mb-2">
+                        Photography Genre <span class="text-xs text-gray-400 font-mono">(Auto-fills prompt + applies style template)</span>
+                      </label>
+                      <div class="relative">
+                        <select
+                          x-model="selectedGenre"
+                          @change="applyGenre($event.target.value)"
+                          class="w-full bg-white border border-gray-300 px-4 py-2.5 text-xs text-gray-900 focus:outline-none focus:border-blue-500 appearance-none pr-8"
+                        >
+                          <option value="">— Any genre (auto-detect from prompt) —</option>
+                          <template x-for="g in genres" :key="g.slug">
+                            <option :value="g.slug" x-text="g.slug.replace(/-/g,' ').replace(/\b\w/g,c=>c.toUpperCase())"></option>
+                          </template>
+                        </select>
+                        <i data-lucide="chevron-down" class="absolute right-2.5 top-2.5 h-3.5 w-3.5 text-gray-400 pointer-events-none"></i>
+                      </div>
+                      <p class="text-xs text-gray-400 mt-1">106 genres — selecting one seeds the prompt and triggers its curated style template at generation time.</p>
+                    </div>
+
                     <!-- Text/Semantic search -->
                     <div class="md:col-span-2">
                       <label class="text-xs font-semibold text-gray-700 block mb-2 flex justify-between">
@@ -474,6 +495,10 @@
                       <div class="flex justify-between">
                         <span class="text-gray-500">X-Async-Generated</span>
                         <span class="font-bold" :class="testResult && testResult.isAsync ? 'text-yellow-600' : 'text-gray-500'" x-text="testResult ? (testResult.isAsync ? 'TRUE (Queued)' : 'FALSE') : ''"></span>
+                      </div>
+                      <div class="flex justify-between" x-show="testResult && testResult.genre">
+                        <span class="text-gray-500">X-Genre</span>
+                        <span class="font-bold text-purple-600 font-mono text-xs" x-text="testResult ? testResult.genre : ''"></span>
                       </div>
                       <div class="flex-col pt-1 border-t border-gray-200 mt-1.5">
                         <span class="text-gray-500 block mb-1">Cache-Control</span>
