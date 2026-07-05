@@ -267,31 +267,27 @@ export async function runDailyIndexer(deps: IndexerDeps): Promise<IndexerResult>
 	const byProvider: Record<string, { indexed: number; skipped: number; errors: number }> = {};
 	let totalIndexed = 0, totalSkipped = 0, totalErrors = 0;
 
-	// Sequential processing to stay within 512MB RAM limit — image buffers are large
-	const CONCURRENCY = 1;
-	for (let i = 0; i < allPhotos.length; i += CONCURRENCY) {
-		const batch = allPhotos.slice(i, i + CONCURRENCY);
-		const batchNum = Math.floor(i / CONCURRENCY) + 1;
-		const totalBatches = Math.ceil(allPhotos.length / CONCURRENCY);
-		console.log(`[Indexer] Batch ${batchNum}/${totalBatches} — photos ${i + 1}-${Math.min(i + CONCURRENCY, allPhotos.length)}/${allPhotos.length} (indexed:${totalIndexed} skipped:${totalSkipped} errors:${totalErrors})`);
+	// Sequential + 500ms pause between photos — lets V8 GC collect previous buffers before next allocation
+	for (let i = 0; i < allPhotos.length; i++) {
+		const photo = allPhotos[i];
+		console.log(`[Indexer] Photo ${i + 1}/${allPhotos.length} [${photo.provider}] (indexed:${totalIndexed} skipped:${totalSkipped} errors:${totalErrors})`);
 
-		const outcomes = await Promise.all(
-			batch.map(photo => indexPhoto(photo, deps, settings, existingUrls))
-		);
-		for (let j = 0; j < batch.length; j++) {
-			const p = batch[j].provider;
-			if (!byProvider[p]) byProvider[p] = { indexed: 0, skipped: 0, errors: 0 };
-			const { result: r, cdnUrl } = outcomes[j];
-			if (r === "indexed") {
-				byProvider[p].indexed++; totalIndexed++;
-				console.log(`[Indexer] ✓ [${p}] ${batch[j].alt.slice(0, 60)} → ${cdnUrl}`);
-			} else if (r === "skipped") {
-				byProvider[p].skipped++; totalSkipped++;
-			} else {
-				byProvider[p].errors++; totalErrors++;
-				console.log(`[Indexer] ✗ [${p}] timeout/error: ${batch[j].sourceUrl.slice(0, 80)}`);
-			}
+		const { result: r, cdnUrl } = await indexPhoto(photo, deps, settings, existingUrls);
+		const p = photo.provider;
+		if (!byProvider[p]) byProvider[p] = { indexed: 0, skipped: 0, errors: 0 };
+
+		if (r === "indexed") {
+			byProvider[p].indexed++; totalIndexed++;
+			console.log(`[Indexer] ✓ [${p}] ${photo.alt.slice(0, 60)} → ${cdnUrl}`);
+		} else if (r === "skipped") {
+			byProvider[p].skipped++;
+			totalSkipped++;
+		} else {
+			byProvider[p].errors++; totalErrors++;
+			console.log(`[Indexer] ✗ [${p}] timeout/error: ${photo.sourceUrl.slice(0, 80)}`);
 		}
+
+		if (r !== "skipped") await new Promise(r => setTimeout(r, 500));
 	}
 
 	const duration = Date.now() - start;
