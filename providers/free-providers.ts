@@ -69,21 +69,54 @@ export async function fetchWikimediaFeatured(category = "Quality_images_of_lands
 		});
 }
 
+export async function fetchWikimediaSearch(
+	query: string,
+	limit = 20,
+): Promise<Array<{ sourceUrl: string; pageUrl: string; alt: string; category: string; width: number; height: number }>> {
+	const params = new URLSearchParams({
+		action: "query",
+		generator: "search",
+		gsrsearch: `filetype:bitmap ${query}`,
+		gsrnamespace: "6",
+		gsrlimit: String(limit),
+		gsrinfo: "totalhits",
+		prop: "imageinfo",
+		iiprop: "url|size|extmetadata|mediatype",
+		iiurlwidth: "1200",
+		format: "json",
+		origin: "*",
+	});
+	const res = await fetch(`https://commons.wikimedia.org/w/api.php?${params}`, {
+		signal: AbortSignal.timeout(12000),
+	});
+	if (!res.ok) return [];
+	const json = await res.json() as any;
+	const pages = Object.values(json?.query?.pages || {}) as any[];
+	return pages
+		.filter((p: any) => {
+			const ii = p.imageinfo?.[0];
+			return ii && ii.width >= 1200 && ii.mediatype === "BITMAP";
+		})
+		.map((p: any) => {
+			const ii = p.imageinfo[0];
+			const meta = ii.extmetadata || {};
+			return {
+				sourceUrl: ii.url,
+				pageUrl: ii.descriptionurl || "",
+				alt: meta.ImageDescription?.value?.replace(/<[^>]+>/g, "").slice(0, 200) || p.title || "wikimedia photo",
+				category: "nature",
+				width: ii.width,
+				height: ii.height,
+			};
+		});
+}
+
 export class WikimediaProvider implements FallbackProvider {
 	readonly name = "Wikimedia";
 
 	async fetch(prompt: string, _promptVector: number[]): Promise<FallbackResult | null> {
 		const { genre, staticSlug } = matchGenre(prompt);
-		// Map genre slug to a relevant Wikimedia category
-		const categoryMap: Record<string, string> = {
-			geophotography: "Quality_images_of_landscapes",
-			"aerial-photography": "Quality_aerial_photographs",
-			"architectural-photography": "Quality_images_of_architecture",
-			"wildlife-photography": "Quality_images_of_animals",
-			"underwater-photography": "Quality_underwater_photographs",
-		};
-		const wikiCategory = categoryMap[genre] || "Quality_images_of_landscapes";
-		const photos = await fetchWikimediaFeatured(wikiCategory, 10);
+		const photos = await fetchWikimediaSearch(prompt, 20);
 		if (!photos.length) return null;
 		const idx = Math.abs(prompt.split("").reduce((h, c) => (h * 31 + c.charCodeAt(0)) | 0, 0)) % photos.length;
 		const photo = photos[idx];

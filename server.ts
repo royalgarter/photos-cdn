@@ -666,8 +666,8 @@ const FALLBACK_CHAIN: FallbackProvider[] = [
 		async () => { const s = await getSettings().catch(() => ({} as any)); return s.openverseClientSecret || process.env.OPENVERSE_CLIENT_SECRET; }
 	),
 	// No-auth free providers
-	new BingProvider(),
 	new WikimediaProvider(),
+	new BingProvider(),
 	new FlickrPublicProvider(),
 	new ShopifyBurstProvider(),
 	new FreestocksProvider(),
