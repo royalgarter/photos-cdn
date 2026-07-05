@@ -10,6 +10,7 @@ import { UnsplashProvider } from "./providers/unsplash.ts";
 import { PicsumProvider } from "./providers/picsum.ts";
 import { WallhavenProvider } from "./providers/wallhaven.ts";
 import { OpenverseProvider } from "./providers/openverse.ts";
+import { BingProvider, WikimediaProvider, FlickrPublicProvider } from "./providers/free-providers.ts";
 import type { FallbackProvider } from "./providers/types.ts";
 import { GENRES } from "./providers/types.ts";
 import { startDailyIndexer, runDailyIndexer, type IndexerStatus } from "./workers/daily-indexer.ts";
@@ -72,6 +73,8 @@ interface AppSettings {
   unsplashAccessKey: string;
   wallhavenApiKey: string;
   pixabayApiKey: string;
+  openverseClientId: string;
+  openverseClientSecret: string;
   // placeholder: stabilityApiKey: string;
   // placeholder: openaiApiKey: string;
   // Transient: set by generateImageWithFallback before calling providers
@@ -263,7 +266,9 @@ async function connectToArango() {
         pexelsApiKey: process.env.PEXELS_API_KEY || "",
         unsplashAccessKey: process.env.UNSPLASH_ACCESS_KEY || "",
         wallhavenApiKey: process.env.WALLHAVEN_API_KEY || "",
-        pixabayApiKey: process.env.PIXABAY_API_KEY || ""
+        pixabayApiKey: process.env.PIXABAY_API_KEY || "",
+        openverseClientId: process.env.OPENVERSE_CLIENT_ID || "",
+        openverseClientSecret: process.env.OPENVERSE_CLIENT_SECRET || ""
       });
       addLog("system", "ArangoDB 'Settings' collection initialized with default configuration structure.");
     } else {
@@ -560,9 +565,13 @@ const FALLBACK_CHAIN: FallbackProvider[] = [
     return s.unsplashAccessKey || process.env.UNSPLASH_ACCESS_KEY;
   }),
   new OpenverseProvider(
-    process.env.OPENVERSE_CLIENT_ID || "",
-    process.env.OPENVERSE_CLIENT_SECRET || ""
+    async () => { const s = await getSettings().catch(() => ({} as any)); return s.openverseClientId || process.env.OPENVERSE_CLIENT_ID; },
+    async () => { const s = await getSettings().catch(() => ({} as any)); return s.openverseClientSecret || process.env.OPENVERSE_CLIENT_SECRET; }
   ),
+  // No-auth free providers
+  new BingProvider(),
+  new WikimediaProvider(),
+  new FlickrPublicProvider(),
   // Static.photos — no key, category-mapped
   new StaticPhotosProvider(),
   // Keyless deterministic fallbacks

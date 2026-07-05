@@ -70,20 +70,24 @@ export async function fetchOpenversePhotos(
   }
 }
 
+type KeyGetter = () => Promise<string | undefined>;
+
 export class OpenverseProvider implements FallbackProvider {
   readonly name = "Openverse";
-  private clientId: string;
-  private clientSecret: string;
+  private getClientId: KeyGetter;
+  private getClientSecret: KeyGetter;
 
-  constructor(clientId: string, clientSecret: string) {
-    this.clientId = clientId;
-    this.clientSecret = clientSecret;
+  constructor(getClientId: KeyGetter, getClientSecret: KeyGetter) {
+    this.getClientId = getClientId;
+    this.getClientSecret = getClientSecret;
   }
 
   async fetch(prompt: string, _promptVector: number[]): Promise<FallbackResult | null> {
-    if (!this.clientId || !this.clientSecret) return null;
+    const clientId = await this.getClientId();
+    const clientSecret = await this.getClientSecret();
+    if (!clientId || !clientSecret) return null;
     const { genre, staticSlug } = matchGenre(prompt);
-    const photos = await fetchOpenversePhotos(this.clientId, this.clientSecret, prompt, 5);
+    const photos = await fetchOpenversePhotos(clientId, clientSecret, prompt, 5);
     if (!photos.length) return null;
 
     // pick highest-res result

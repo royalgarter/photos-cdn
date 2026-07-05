@@ -9,6 +9,7 @@ import { Jimp } from "jimp";
 import sharp from "sharp";
 import { matchGenre } from "../providers/static-photos.ts";
 import { fetchOpenversePhotos } from "../providers/openverse.ts";
+import { fetchBingDaily, fetchWikimediaFeatured, fetchFlickrPublic } from "../providers/free-providers.ts";
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -235,11 +236,14 @@ export async function runDailyIndexer(deps: IndexerDeps): Promise<IndexerResult>
   const openverseQueries = ["nature landscape", "street photography", "portrait", "architecture", "wildlife"];
 
   // Fetch all provider feeds in parallel
-  const [pexelsPhotos, unsplashPhotos, pixabayPhotos, picjumboPhotos, ...openverseResults] = await Promise.allSettled([
+  const [pexelsPhotos, unsplashPhotos, pixabayPhotos, picjumboPhotos, bingPhotos, wikimediaPhotos, flickrPhotos, ...openverseResults] = await Promise.allSettled([
     fetchPexelsCurated(settings.pexelsApiKey || process.env.PEXELS_API_KEY || ""),
     fetchUnsplashEditorial(settings.unsplashAccessKey || process.env.UNSPLASH_ACCESS_KEY || ""),
     fetchPixabayEditors(settings.pixabayApiKey || process.env.PIXABAY_API_KEY || ""),
     fetchPicjumboRSS(),
+    fetchBingDaily(16).then(photos => photos.map(p => ({ ...p, provider: "Bing" } as RawPhoto))),
+    fetchWikimediaFeatured("Quality_images_of_landscapes", 20).then(photos => photos.map(p => ({ ...p, provider: "Wikimedia" } as RawPhoto))),
+    fetchFlickrPublic("landscape nature", 20).then(photos => photos.map(p => ({ ...p, provider: "Flickr" } as RawPhoto))),
     ...(ovClientId ? openverseQueries.map(q =>
       fetchOpenversePhotos(ovClientId, ovClientSecret, q, 10).then(photos =>
         photos.map(p => ({ ...p, provider: "Openverse" } as RawPhoto))
@@ -252,6 +256,9 @@ export async function runDailyIndexer(deps: IndexerDeps): Promise<IndexerResult>
     ...(unsplashPhotos.status === "fulfilled" ? unsplashPhotos.value : []),
     ...(pixabayPhotos.status === "fulfilled" ? pixabayPhotos.value : []),
     ...(picjumboPhotos.status === "fulfilled" ? picjumboPhotos.value : []),
+    ...(bingPhotos.status === "fulfilled" ? bingPhotos.value : []),
+    ...(wikimediaPhotos.status === "fulfilled" ? wikimediaPhotos.value : []),
+    ...(flickrPhotos.status === "fulfilled" ? flickrPhotos.value : []),
     ...openverseResults.flatMap(r => r.status === "fulfilled" ? r.value : []),
   ];
 
