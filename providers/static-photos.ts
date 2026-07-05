@@ -5,7 +5,7 @@ import { GENRES } from "./types.ts";
 export function matchGenre(prompt: string): { genre: string; staticSlug: string } {
   const lower = prompt.toLowerCase();
   const words = new Set(lower.split(/\W+/));
-  let best = { genre: "nature", staticSlug: "nature", score: 0 };
+  let best = { genre: "geophotography", staticSlug: "nature", score: 0 };
   for (const g of GENRES) {
     let score = 0;
     for (const kw of g.keywords) {

@@ -39,7 +39,7 @@ export const GENRES: Genre[] = [
     slug: "action-shot",
     staticSlug: "sport",
     promptTemplate: "A dynamic, high-energy action shot of __PROMPT__. Captured with an ultra-fast shutter speed to perfectly freeze the subject in mid-motion. The background should feature a directional motion blur (panning effect) to emphasize extreme speed and kinetic energy. Dramatic sports lighting, crisp details on the subject, vivid colors, shot on a telephoto lens (200mm).",
-    keywords: ["action", "actionshot", "action shot", "motion blur", "freeze", "sport", "dynamic", "fast", "movement"]
+    keywords: ["action", "actionshot", "action shot", "motion blur", "freeze", "sport", "sports", "dynamic", "fast", "movement", "athlete", "athletes", "running", "race", "racing", "soccer", "football", "basketball", "tennis", "swimming", "cycling", "marathon", "sprint", "jump", "kick", "throw", "pitch", "tackle", "dribble", "volleyball", "baseball", "rugby", "gymnastics", "boxing", "martial arts", "skateboard", "snowboard", "skiing", "surfing", "climbing", "triathlon", "game", "match", "tournament", "competition", "championship"]
   },
   {
     slug: "aerial-photography",
@@ -231,7 +231,7 @@ export const GENRES: Genre[] = [
     slug: "geophotography",
     staticSlug: "nature",
     promptTemplate: "A sweeping geophotography shot of __PROMPT__. Focusing on the raw geological formations, rock strata, and earth's topography. Shot during golden hour to emphasize the rugged textures and layers of the terrain. High depth of field, ultra-sharp details, National Geographic landscape documentary style.",
-    keywords: ["geophotography", "geology", "earth", "rock formation", "landscape", "geographic", "terrain", "topography", "land"]
+    keywords: ["geophotography", "geology", "earth", "rock formation", "landscape", "geographic", "terrain", "topography", "land", "mountain", "mountains", "valley", "valley", "hills", "sunset", "sunrise", "scenery", "scenic", "vista", "panorama", "forest", "river", "lake", "waterfall", "canyon", "desert", "meadow", "field", "plains", "nature", "outdoor", "outdoors", "wilderness", "countryside", "rolling hills", "golden hour", "dusk", "dawn"]
   },
   {
     slug: "glamour-photography",
