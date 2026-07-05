@@ -1525,9 +1525,9 @@ function buildSrcsetPayload(image: ImageDocument, fmt: OutputFormat, similarity:
 // 6. DAILY INDEXER WORKER
 // ==========================================
 
-let indexerStatus: IndexerStatus | null = null;
+export let indexerStatus: IndexerStatus | null = null;
 
-function getIndexerDeps() {
+export function getIndexerDeps() {
   return {
     getSettings,
     getImages,

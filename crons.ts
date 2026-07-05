@@ -1,14 +1,25 @@
-const PORT = parseInt(process.env.PORT || "34070");
+import { runDailyIndexer } from "./workers/daily-indexer.ts";
+import { getIndexerDeps, indexerStatus } from "./server.ts";
 
 Deno.cron("trigger-indexer", "0 */4 * * *", async () => {
-  console.log("[Cron] Triggering /api/indexer/trigger (every 4 hours)...");
+  console.log("[Cron] Starting indexer (every 4 hours)...");
+  if (indexerStatus?.running) {
+    console.log("[Cron] Indexer already running — skipping");
+    return;
+  }
+  if (indexerStatus) indexerStatus.running = true;
   try {
-    const res = await fetch(`http://localhost:${PORT}/api/indexer/trigger`, {
-      method: "POST",
-    });
-    const body = await res.json();
-    console.log(`[Cron] Indexer trigger response (${res.status}):`, body);
+    const result = await runDailyIndexer(getIndexerDeps());
+    if (indexerStatus) {
+      indexerStatus.running = false;
+      indexerStatus.lastRun = new Date().toISOString();
+      indexerStatus.lastResult = result;
+    }
+    console.log(
+      `[Cron] Indexer finished — indexed: ${result.indexed}, skipped: ${result.skipped}, errors: ${result.errors} (${(result.duration / 1000).toFixed(1)}s)`,
+    );
   } catch (err) {
-    console.error("[Cron] Failed to trigger indexer:", err);
+    if (indexerStatus) indexerStatus.running = false;
+    console.error("[Cron] Indexer failed:", err);
   }
 });
