@@ -5,8 +5,8 @@
   "scripts": {
     "start": "deno task start",
     "start:node": "node --experimental-strip-types --env-file=.env server.ts",
-    "indexer": "curl -s -X POST http://localhost:34070/api/indexer/trigger | jq",
-    "indexer:status": "curl -s http://localhost:34070/api/indexer/status | jq"
+    "indexer": "curl -sSL -X POST \"$ADMIN_HOST/api/indexer/trigger?key=$ADMIN_KEY\" | jq",
+    "indexer:status": "curl -sSL $ADMIN_HOST/api/indexer/status | jq"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1079.0",

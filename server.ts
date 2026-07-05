@@ -44,8 +44,9 @@ function parseCookies(req: express.Request): Record<string, string> {
 
 function requireAdmin(req: express.Request, res: express.Response, next: express.NextFunction) {
 	if (!ADMIN_KEY) return next(); // no ADMIN_KEY set = open (dev mode)
+
 	const cookies = parseCookies(req);
-	if (cookies.admin_token === ADMIN_TOKEN) return next();
+	if (cookies.admin_token === ADMIN_TOKEN || req.query.key === ADMIN_KEY) return next();
 	return res.status(401).json({ error: "Unauthorized. Visit /?key=ADMIN_KEY to authenticate." });
 }
 
@@ -54,6 +55,7 @@ app.use((req: express.Request, res: express.Response, next: express.NextFunction
 	const key = req.query.key as string | undefined;
 	if (key && ADMIN_KEY && key === ADMIN_KEY) {
 		res.setHeader("Set-Cookie", `admin_token=${ADMIN_TOKEN}; Path=/; HttpOnly; SameSite=Strict`);
+		if (req.path.startsWith("/api/")) return next();
 		const qs = new URLSearchParams();
 		for (const [k, v] of Object.entries(req.query)) {
 			if (k !== "key" && typeof v === "string") qs.set(k, v);
@@ -575,7 +577,7 @@ async function uploadToS3(
 		});
 
 		const key = `${resolutionName}/${imageKey}.jpg`;
-		
+
 		await s3.send(new PutObjectCommand({
 			Bucket: settings.r2BucketName,
 			Key: key,
@@ -1043,7 +1045,7 @@ async function enqueueJob(prompt: string, category: string, seed: number) {
 
 	await updateQueueJob(job);
 	addLog("queue", `ArangoDB Queue: Enqueued background generator job (${job.id})`);
-	
+
 	const currentJobs = await getQueue();
 	if (!currentJobs.some(j => j.status === "processing")) {
 		processQueue();
