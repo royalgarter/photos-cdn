@@ -122,12 +122,12 @@ const renderIcons = () => {
 const registerAppState = () => {
   window.Alpine.data("appState", () => ({
     // Config state
-    width: 800,
-    height: 600,
+    width: 1920,
+    height: 1080,
+    seed: Math.floor(Math.random() * 1e4),
     category: "nature",
-    seed: 42,
-    text: "",
     format: "image",
+    text: "Lorem ipsum dolor sit amet. The quick brown fox jumps over the lazy dog.",
 
     // Server state
     images: [],

@@ -28,6 +28,9 @@ export function applyGenreTemplate(prompt: string): { adjustedPrompt: string; ge
   const genreEntry = GENRES.find(g => g.slug === genre);
   const template = genreEntry?.promptTemplate;
   const adjustedPrompt = template ? template.replace("__PROMPT__", prompt) : prompt;
+
+  console.log('[adjustedPrompt]', adjustedPrompt)
+
   return { adjustedPrompt, genre, staticSlug };
 }
 

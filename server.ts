@@ -424,7 +424,13 @@ async function updateQueueJob(job: QueueJob & { createdAtRaw?: number }): Promis
 // Logs Accessors
 async function getLogs(): Promise<LogEntry[]> {
   if (!arangoDb) throw new Error("ArangoDB is not initialized");
-  const cursor = await arangoDb.query(`FOR log IN Logs SORT log.timestampRaw DESC LIMIT 100 RETURN log`);
+  const cursor = await arangoDb.query(`
+    FOR log IN Logs
+    FILTER log.type IN ['api']
+    SORT log.timestampRaw DESC
+    LIMIT 100
+    RETURN log
+  `);
   return await cursor.all();
 }
 
@@ -795,21 +801,19 @@ async function generateImageWithFallback(
     addLog("queue", `[Provider Chain] Gemini skipped — no API key.`);
   }
 
-  const cfResult = await generateWithCloudflareAI(adjustedPrompt, settings);
-  if (cfResult) return cfResult.base64Image;
-  addLog("queue", `[Provider Chain] Cloudflare AI failed or unconfigured, trying next provider...`);
-
-  const pollinationsResult = await generateWithPollinations(adjustedPrompt);
-  if (pollinationsResult) return pollinationsResult.base64Image;
-  addLog("queue", `[Provider Chain] Pollinations.ai failed, trying next provider...`);
-
-  const hfResult = await generateWithHuggingFace(adjustedPrompt, settings);
-  if (hfResult) return hfResult.base64Image;
-  addLog("queue", `[Provider Chain] HuggingFace failed, trying next provider...`);
-
+  let genResult = null;
+  let generators = [generateWithPollinations] || [generateWithCloudflareAI, generateWithPollinations, generateWithHuggingFace];
   // placeholder: Replicate
   // placeholder: Stability AI
   // placeholder: OpenAI DALL-E
+
+  while (!genResult && generators?.length) {
+    let chosen = generators[Math.floor(Math.random() * generators.length)];
+    genResult = await chosen(adjustedPrompt, settings);
+    if (!genResult) generators = generators.filter(x => x != chosen);
+  }
+
+  if (genResult) return genResult.base64Image;
 
   // Last resort: use base image as-is
   if (baseImg) {
