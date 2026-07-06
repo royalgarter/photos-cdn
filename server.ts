@@ -1258,13 +1258,24 @@ app.get("/api/cdn/:width/:height", async (req, res) => {
 
 		if (!timedOut && textQuery) {
 			addLog("api", `[Phase 2] Computing query embedding vector...`);
-			const vector = await getEmbeddingVector(textQuery);
-			addLog("api", `[Phase 2] Query vector: [${vector.slice(0, 3).join(", ")}... 128 dimensions]`);
-			addLog("api", `[Phase 2] ArangoDB Vector Index: APPROX_NEAR_COSINE search across ${currentImages.length} documents...`);
-			const closest = await findClosestImage(vector, currentImages);
-			matchedImage = closest?.image || null;
-			similarityScore = closest?.similarity || 0;
-			addLog("api", `[Phase 2] Closest Match: "${matchedImage?.text}" | Cosine Similarity Score: ${similarityScore.toFixed(4)}`);
+			try {
+				const vector = await getEmbeddingVector(textQuery);
+				addLog("api", `[Phase 2] Query vector: [${vector.slice(0, 3).join(", ")}... 128 dimensions]`);
+				addLog("api", `[Phase 2] ArangoDB Vector Index: APPROX_NEAR_COSINE search across ${currentImages.length} documents...`);
+				const closest = await findClosestImage(vector, currentImages);
+				matchedImage = closest?.image || null;
+				similarityScore = closest?.similarity || 0;
+				addLog("api", `[Phase 2] Closest Match: "${matchedImage?.text}" | Cosine Similarity Score: ${similarityScore.toFixed(4)}`);
+			} catch (embErr) {
+				addLog("api", `[Phase 2] Embedding failed (${(embErr as Error).message}) — falling back to category match`);
+				isFallback = true;
+				const filtered = currentImages.filter(img => img.category.toLowerCase() === category.toLowerCase());
+				if (filtered.length > 0) {
+					filtered.sort((a, b) => Math.abs(a.seed - seed) - Math.abs(b.seed - seed));
+					matchedImage = filtered[0];
+					similarityScore = 0.5;
+				}
+			}
 		} else if (!timedOut) {
 			addLog("api", `[Phase 2] Searching by category: "${category}" and seed: ${seed}`);
 			const filtered = currentImages.filter(img => img.category.toLowerCase() === category.toLowerCase());
@@ -1276,6 +1287,11 @@ app.get("/api/cdn/:width/:height", async (req, res) => {
 		}
 
 		let finalImage = matchedImage || currentImages[0];
+		if (!finalImage) {
+			addLog("api", `[Phase 2] No images in DB — redirecting to Picsum fallback`);
+			setFallbackHeaders(res, "Picsum-Empty", 0, timedOut);
+			return res.redirect(302, `https://picsum.photos/seed/${encodeURIComponent((textQuery || category).substring(0, 30))}/${width}/${height}`);
+		}
 		let cacheControl = "public, max-age=31536000";
 		let triggerGeneration = false;
 		const provider = finalImage._key ? "DB" : "Seed";
@@ -1401,9 +1417,14 @@ app.get("/api/cdn/:width/:height", async (req, res) => {
 			})
 		]);
 	} catch (error) {
+		addLog("system", `[API ERROR] Failure serving request: ${(error as Error).message}`);
 		if (!res.headersSent) {
-			addLog("system", `[API ERROR] Failure serving request: ${(error as Error).message}`);
-			res.status(500).json({ error: "Internal Server Error", message: (error as Error).message });
+			// Last-resort: redirect to Picsum so the response is always an image
+			const picsumUrl = `https://picsum.photos/seed/${encodeURIComponent((textQuery || category).substring(0, 30))}/${width}/${height}`;
+			res.setHeader("X-CDN-Fallback", "true");
+			res.setHeader("X-CDN-Provider", "Picsum-ErrorRecovery");
+			res.setHeader("X-CDN-Error", (error as Error).message.slice(0, 200));
+			return res.redirect(302, picsumUrl);
 		}
 	}
 });
