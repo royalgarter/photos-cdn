@@ -14,7 +14,7 @@ import { UnsplashProvider } from "./providers/unsplash.ts";
 import { PicsumProvider } from "./providers/picsum.ts";
 import { WallhavenProvider } from "./providers/wallhaven.ts";
 import { OpenverseProvider } from "./providers/openverse.ts";
-import { BingProvider, WikimediaProvider, FlickrPublicProvider, ShopifyBurstProvider, FreestocksProvider, LifeOfPixProvider } from "./providers/free-providers.ts";
+import { BingProvider, WikimediaProvider, FlickrPublicProvider, ShopifyBurstProvider, FreestocksProvider, LifeOfPixProvider, ImgSearchProvider, PxHereProvider } from "./providers/free-providers.ts";
 import type { FallbackProvider } from "./providers/types.ts";
 import { GENRES } from "./providers/types.ts";
 import { startDailyIndexer, runDailyIndexer, type IndexerStatus } from "./workers/daily-indexer.ts";
@@ -130,6 +130,8 @@ interface AppSettings {
 	pixabayApiKey: string;
 	openverseClientId: string;
 	openverseClientSecret: string;
+	// Provider priority ranks — lower number = higher priority (0 = disabled)
+	providerRanks: Record<string, number>;
 	// placeholder: stabilityApiKey: string;
 	// placeholder: openaiApiKey: string;
 	// Transient: set by generateImageWithFallback before calling providers
@@ -324,7 +326,8 @@ async function connectToArango() {
 				wallhavenApiKey: process.env.WALLHAVEN_API_KEY || "",
 				pixabayApiKey: process.env.PIXABAY_API_KEY || "",
 				openverseClientId: process.env.OPENVERSE_CLIENT_ID || "",
-				openverseClientSecret: process.env.OPENVERSE_CLIENT_SECRET || ""
+				openverseClientSecret: process.env.OPENVERSE_CLIENT_SECRET || "",
+				providerRanks: DEFAULT_PROVIDER_RANKS
 			});
 			addLog("system", "ArangoDB 'Settings' collection initialized with default configuration structure.");
 		} else {
@@ -360,7 +363,8 @@ async function getSettings(): Promise<AppSettings> {
 		pexelsApiKey: doc.pexelsApiKey || "",
 		unsplashAccessKey: doc.unsplashAccessKey || "",
 		wallhavenApiKey: doc.wallhavenApiKey || "",
-		pixabayApiKey: doc.pixabayApiKey || ""
+		pixabayApiKey: doc.pixabayApiKey || "",
+		providerRanks: doc.providerRanks || DEFAULT_PROVIDER_RANKS
 	};
 }
 
@@ -647,8 +651,26 @@ async function uploadToS3(
 	}
 }
 
-const FALLBACK_CHAIN: FallbackProvider[] = [
-	// Keyed providers first — highest quality, real search results
+// ── Provider registry ─────────────────────────────────────────────────────────
+
+export const DEFAULT_PROVIDER_RANKS: Record<string, number> = {
+	Wallhaven: 1,
+	Pexels: 2,
+	Unsplash: 3,
+	Openverse: 4,
+	Wikimedia: 5,
+	Bing: 6,
+	Flickr: 7,
+	ShopifyBurst: 8,
+	ImgSearch: 9,
+	LifeOfPix: 10,
+	Freestocks: 11,
+	PxHere: 12,
+	StaticPhotos: 13,
+	Picsum: 99,
+};
+
+const ALL_PROVIDERS: FallbackProvider[] = [
 	new WallhavenProvider(async () => {
 		const s = await getSettings().catch(() => ({} as any));
 		return s.wallhavenApiKey || process.env.WALLHAVEN_API_KEY;
@@ -665,21 +687,29 @@ const FALLBACK_CHAIN: FallbackProvider[] = [
 		async () => { const s = await getSettings().catch(() => ({} as any)); return s.openverseClientId || process.env.OPENVERSE_CLIENT_ID; },
 		async () => { const s = await getSettings().catch(() => ({} as any)); return s.openverseClientSecret || process.env.OPENVERSE_CLIENT_SECRET; }
 	),
-	// No-auth free providers
 	new WikimediaProvider(),
 	new BingProvider(),
 	new FlickrPublicProvider(),
 	new ShopifyBurstProvider(),
 	new FreestocksProvider(),
 	new LifeOfPixProvider(),
-	// Static.photos — no key, category-mapped
+	new ImgSearchProvider(),
+	new PxHereProvider(),
 	new StaticPhotosProvider(),
-	// Keyless deterministic fallbacks
 	new PicsumProvider(),
 ];
 
+async function getFallbackChain(): Promise<FallbackProvider[]> {
+	const settings = await getSettings().catch(() => ({ providerRanks: DEFAULT_PROVIDER_RANKS } as any));
+	const ranks: Record<string, number> = { ...DEFAULT_PROVIDER_RANKS, ...(settings.providerRanks || {}) };
+	return ALL_PROVIDERS
+		.filter(p => (ranks[p.name] ?? 50) > 0)
+		.sort((a, b) => (ranks[a.name] ?? 50) - (ranks[b.name] ?? 50));
+}
+
 async function fetchBaseImage(prompt: string, promptVector: number[]): Promise<{ buffer: Buffer; mimeType: string; provider: string; sourceUrl: string; genre: string; staticSlug: string } | null> {
-	for (const provider of FALLBACK_CHAIN) {
+	const chain = await getFallbackChain();
+	for (const provider of chain) {
 		try {
 			const result = await provider.fetch(prompt, promptVector);
 			if (result) {
@@ -1262,7 +1292,7 @@ app.get("/api/cdn/:width/:height", async (req, res) => {
 					.catch(err => addLog("api", `[Phase 3 ERROR] Async job ${jobId} failed: ${(err as Error).message}`));
 				res.setHeader("Location", `/api/cdn/${width}/${height}/status/${jobId}?text=${encodeURIComponent(textQuery)}&format=${format}&output=${outputFormat}`);
 				res.setHeader("Retry-After", "5");
-				setFallbackHeaders(res, provider, similarityScore);
+				setFallbackHeaders(res, provider, similarityScore, false, finalImage?.sourceUrl);
 				return res.status(202).json({
 					status: "accepted",
 					jobId,
@@ -1291,7 +1321,7 @@ app.get("/api/cdn/:width/:height", async (req, res) => {
 			res.setHeader("X-Genre", genre);
 			res.setHeader("X-Genre-Slug", gSlug);
 		}
-		if (isFallback) setFallbackHeaders(res, provider, similarityScore, timedOut);
+		if (isFallback) setFallbackHeaders(res, provider, similarityScore, timedOut, finalImage?.sourceUrl);
 
 		if (format === "blurhash") {
 			addLog("api", `[Phase 4] Format requested: blurhash.`);
@@ -1391,11 +1421,15 @@ function serveTimeout(ms: number): Promise<never> {
 	);
 }
 
-function setFallbackHeaders(res: any, provider: string, similarity: number, timedOut = false) {
+function setFallbackHeaders(res: any, provider: string, similarity: number, timedOut = false, sourceUrl?: string) {
 	res.setHeader("X-CDN-Fallback", "true");
 	res.setHeader("X-CDN-Provider", provider);
 	res.setHeader("X-CDN-Similarity", similarity.toFixed(4));
 	if (timedOut) res.setHeader("X-CDN-Timeout", "true");
+	if (sourceUrl) {
+		res.setHeader("X-CDN-Source-URL", sourceUrl);
+		res.setHeader("X-CDN-Credits", `Image from ${provider}; source: ${sourceUrl}`);
+	}
 }
 
 // ==========================================
@@ -1446,7 +1480,7 @@ app.get("/api/cdn/srcset", async (req, res) => {
 						.then(() => addLog("api", `[srcset async] Generation complete for job ${jobId}: "${textQuery}"`))
 						.catch(err => addLog("api", `[srcset async] Generation failed for job ${jobId}: ${(err as Error).message}`));
 					res.setHeader("Location", `/api/cdn/srcset/status/${jobId}?text=${encodeURIComponent(textQuery)}&output=${outputFormat}`);
-					setFallbackHeaders(res, "DB", similarityScore);
+					setFallbackHeaders(res, "DB", similarityScore, false, finalImage?.sourceUrl);
 					return res.status(202).json({
 						status: "accepted",
 						jobId,
@@ -1478,7 +1512,7 @@ app.get("/api/cdn/srcset", async (req, res) => {
 		res.setHeader("X-Similarity-Score", similarityScore.toString());
 		res.setHeader("X-Async-Generated", asyncJobId ? "pending" : "false");
 		if (isFallback) {
-			setFallbackHeaders(res, "DB", similarityScore, timedOut);
+			setFallbackHeaders(res, "DB", similarityScore, timedOut, image?.sourceUrl);
 			res.setHeader("Cache-Control", timedOut ? "public, max-age=30" : "public, max-age=60, stale-while-revalidate=86400");
 		}
 		return res.status(200).json(buildSrcsetPayload(image, outputFormat, similarityScore, isFallback));

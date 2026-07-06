@@ -12,7 +12,7 @@ import { Buffer } from "node:buffer";
 import sharp from "sharp";
 import { matchGenre } from "../providers/static-photos.ts";
 import { fetchOpenversePhotos } from "../providers/openverse.ts";
-import { fetchBingDaily, fetchWikimediaFeatured, fetchFlickrPublic } from "../providers/free-providers.ts";
+import { fetchBingDaily, fetchWikimediaFeatured, fetchFlickrPublic, fetchShopifyBurst, fetchFreestocks, fetchLifeOfPix, fetchImgSearch, fetchPxHere } from "../providers/free-providers.ts";
 import type { PendingPhoto } from "../server.ts";
 
 // ── Types ────────────────────────────────────────────────────────────────────
@@ -155,9 +155,14 @@ export async function crawlFeeds(deps: IndexerDeps): Promise<{ queued: number; s
 
 	const ovClientId = settings.openverseClientId || process.env.OPENVERSE_CLIENT_ID || "";
 	const ovClientSecret = settings.openverseClientSecret || process.env.OPENVERSE_CLIENT_SECRET || "";
-	const openverseQueries = ["nature landscape", "street photography", "portrait", "architecture", "wildlife"];
+	const indexerQueries = ["nature landscape", "street photography", "portrait", "architecture", "wildlife"];
 
-	const [pexelsPhotos, unsplashPhotos, pixabayPhotos, picjumboPhotos, bingPhotos, wikimediaPhotos, flickrPhotos, ...openverseResults] = await Promise.allSettled([
+	const [
+		pexelsPhotos, unsplashPhotos, pixabayPhotos, picjumboPhotos,
+		bingPhotos, wikimediaPhotos, flickrPhotos,
+		shopifyPhotos, freestocksPhotos,
+		...rest
+	] = await Promise.allSettled([
 		fetchPexelsCurated(settings.pexelsApiKey || process.env.PEXELS_API_KEY || ""),
 		fetchUnsplashEditorial(settings.unsplashAccessKey || process.env.UNSPLASH_ACCESS_KEY || ""),
 		fetchPixabayEditors(settings.pixabayApiKey || process.env.PIXABAY_API_KEY || ""),
@@ -165,7 +170,15 @@ export async function crawlFeeds(deps: IndexerDeps): Promise<{ queued: number; s
 		fetchBingDaily(16).then(photos => photos.map(p => ({ ...p, provider: "Bing" } as RawPhoto))),
 		fetchWikimediaFeatured("Quality_images_of_landscapes", 20).then(photos => photos.map(p => ({ ...p, provider: "Wikimedia" } as RawPhoto))),
 		fetchFlickrPublic("landscape nature", 20).then(photos => photos.map(p => ({ ...p, provider: "Flickr" } as RawPhoto))),
-		...(ovClientId ? openverseQueries.map(q =>
+		fetchShopifyBurst("nature").then(photos => photos.map(p => ({ ...p, provider: "ShopifyBurst" } as RawPhoto))),
+		fetchFreestocks(1).then(photos => photos.map(p => ({ ...p, provider: "Freestocks" } as RawPhoto))),
+		// LifeOfPix, ImgSearch, PxHere — one query per genre sample
+		...indexerQueries.flatMap(q => [
+			fetchLifeOfPix(q, 5).then(photos => photos.map(p => ({ ...p, provider: "LifeOfPix" } as RawPhoto))),
+			fetchImgSearch(q, 10).then(photos => photos.map(p => ({ ...p, provider: "ImgSearch" } as RawPhoto))),
+			fetchPxHere(q, 1).then(photos => photos.map(p => ({ ...p, provider: "PxHere" } as RawPhoto))),
+		]),
+		...(ovClientId ? indexerQueries.map(q =>
 			fetchOpenversePhotos(ovClientId, ovClientSecret, q, 10).then(photos =>
 				photos.map(p => ({ ...p, provider: "Openverse" } as RawPhoto))
 			)
@@ -180,7 +193,9 @@ export async function crawlFeeds(deps: IndexerDeps): Promise<{ queued: number; s
 		...(bingPhotos.status === "fulfilled" ? bingPhotos.value : []),
 		...(wikimediaPhotos.status === "fulfilled" ? wikimediaPhotos.value : []),
 		...(flickrPhotos.status === "fulfilled" ? flickrPhotos.value : []),
-		...openverseResults.flatMap(r => r.status === "fulfilled" ? r.value : []),
+		...(shopifyPhotos.status === "fulfilled" ? shopifyPhotos.value : []),
+		...(freestocksPhotos.status === "fulfilled" ? freestocksPhotos.value : []),
+		...rest.flatMap(r => r.status === "fulfilled" ? r.value : []),
 	];
 
 	let queued = 0, skipped = 0;

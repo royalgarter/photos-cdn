@@ -1170,6 +1170,64 @@ if (res.status === 202) {
 										</div>
 									</div>
 
+									<!-- Section: Provider Priority -->
+									<div class="space-y-4">
+										<h3 class="text-xs font-bold text-gray-800 uppercase tracking-wider font-mono border-b border-gray-200 pb-1.5 flex items-center gap-1.5">
+											<span class="h-2 w-2 bg-orange-500"></span>
+											Fallback Provider Priority
+										</h3>
+										<p class="text-xs text-gray-400">Drag to reorder. Lower rank = tried first. Set rank to <code class="bg-gray-100 text-red-500 px-1 font-mono">0</code> to disable a provider.</p>
+										<div
+											x-data="{
+												get providerList() {
+													const defaults = {Wallhaven:1,Pexels:2,Unsplash:3,Openverse:4,Wikimedia:5,Bing:6,Flickr:7,ShopifyBurst:8,ImgSearch:9,LifeOfPix:10,Freestocks:11,PxHere:12,StaticPhotos:13,Picsum:99};
+													const ranks = Object.assign({}, defaults, settings.providerRanks || {});
+													return Object.entries(ranks).sort((a,b) => a[1]-b[1]).map(([name, rank]) => ({ name, rank }));
+												},
+												dragSrc: null,
+												onDragStart(e, name) { this.dragSrc = name; e.dataTransfer.effectAllowed = 'move'; },
+												onDragOver(e) { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; },
+												onDrop(e, targetName) {
+													e.preventDefault();
+													if (!this.dragSrc || this.dragSrc === targetName) return;
+													const list = this.providerList;
+													const srcIdx = list.findIndex(p => p.name === this.dragSrc);
+													const tgtIdx = list.findIndex(p => p.name === targetName);
+													const reordered = [...list];
+													const [removed] = reordered.splice(srcIdx, 1);
+													reordered.splice(tgtIdx, 0, removed);
+													const newRanks = {};
+													reordered.forEach((p, i) => { newRanks[p.name] = p.rank === 0 ? 0 : i + 1; });
+													settings.providerRanks = newRanks;
+												}
+											}"
+											class="space-y-1"
+										>
+											<template x-for="p in providerList" :key="p.name">
+												<div
+													class="flex items-center gap-3 bg-gray-50 border border-gray-200 px-3 py-2 cursor-grab active:cursor-grabbing select-none"
+													draggable="true"
+													@dragstart="onDragStart($event, p.name)"
+													@dragover="onDragOver($event)"
+													@drop="onDrop($event, p.name)"
+												>
+													<i data-lucide="grip-vertical" class="h-3 w-3 text-gray-400 flex-shrink-0"></i>
+													<span class="text-xs font-mono text-gray-700 flex-1" x-text="p.name"></span>
+													<span class="text-xs text-gray-400 w-12 text-center">#<span x-text="p.rank === 0 ? '—' : p.rank"></span></span>
+													<input
+														type="number"
+														min="0"
+														max="999"
+														class="w-14 bg-white border border-gray-300 px-2 py-1 text-xs font-mono text-gray-900 focus:outline-none focus:border-blue-500"
+														:value="p.rank"
+														@change="settings.providerRanks = {...(settings.providerRanks||{}), [p.name]: parseInt($event.target.value)||0}"
+														title="Rank (0 = disabled)"
+													/>
+												</div>
+											</template>
+										</div>
+									</div>
+
 									<!-- Section: Storage Bucket -->
 									<div class="space-y-4">
 										<h3 class="text-xs font-bold text-gray-800 uppercase tracking-wider font-mono border-b border-gray-200 pb-1.5 flex items-center gap-1.5">

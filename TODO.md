@@ -11,7 +11,7 @@
 - [x] 7. Cloudflare edge cache headers — `Vary: Accept`, `ETag`, `X-Image-Key` for CDN-aware caching
 
 ## Providers
-- [ ] https://imgsearch.com/ Free AI Stock Images - Download and Use Anywhere
+- [x] https://imgsearch.com/ Free AI Stock Images - Download and Use Anywhere
 ```sh
 
 # Step 1
@@ -44,6 +44,7 @@ curl 'https://imgsearch.com/search-data' \
 - [ ] https://www.flickr.com/services/api/ — API key for full search (register at flickr.com/services/apps/create)
 - [x] https://www.shopify.com/stock-photos/free-images — Burst by Shopify, HTML scrape burst.shopifycdn.com
 - [x] https://www.lifeofpix.com/ — GraphQL API at /api/, lopixsStatus:"approved" filter
+- [x] https://pxhere.com/ — implemented; Cloudflare challenge blocks without valid cf_clearance (same as stocksnap/kaboompics), returns null gracefully
 - [ ] https://stocksnap.io/ — Cloudflare challenge blocks server-side requests
 - [ ] https://kaboompics.com/ — Cloudflare challenge blocks server-side requests
 - [x] https://freestocks.org/ — HTML scrape WordPress uploads, strip -WxH suffix for full-size

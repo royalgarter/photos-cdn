@@ -150,6 +150,7 @@ const registerAppState = () => {
 			cdnDomain: "",
 			openverseClientId: "",
 			openverseClientSecret: "",
+			providerRanks: {},
 		},
 		settingsSavedMessage: false,
 

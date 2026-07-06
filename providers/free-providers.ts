@@ -350,3 +350,141 @@ export class LifeOfPixProvider implements FallbackProvider {
 		}
 	}
 }
+
+// ── ImgSearch ─────────────────────────────────────────────────────────────────
+
+export async function fetchImgSearch(query: string, perPage = 30): Promise<Array<{ sourceUrl: string; pageUrl: string; alt: string; category: string; width: number; height: number }>> {
+	const UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36";
+	const slug = query.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-");
+
+	// Step 1: GET search page to collect session cookies + CSRF token
+	const pageRes = await fetch(`https://imgsearch.com/search/${slug}`, {
+		headers: { "user-agent": UA, "accept": "text/html" },
+		signal: AbortSignal.timeout(12000),
+	});
+	if (!pageRes.ok) return [];
+
+	const html = await pageRes.text();
+	const csrfMatch = html.match(/meta[^>]+name="csrf-token"[^>]+content="([^"]+)"/);
+	if (!csrfMatch) return [];
+	const csrfToken = csrfMatch[1];
+
+	// Collect Set-Cookie headers
+	const rawCookies = pageRes.headers.getSetCookie?.() ?? [];
+	const cookieStr = rawCookies.map((c: string) => c.split(";")[0]).join("; ");
+
+	// Step 2: POST search-data
+	const body = new URLSearchParams({ perPage: String(perPage), page: "1", searchQuery: query });
+	const dataRes = await fetch("https://imgsearch.com/search-data", {
+		method: "POST",
+		headers: {
+			"content-type": "application/x-www-form-urlencoded; charset=UTF-8",
+			"accept": "application/json, text/javascript, */*; q=0.01",
+			"x-csrf-token": csrfToken,
+			"x-requested-with": "XMLHttpRequest",
+			"origin": "https://imgsearch.com",
+			"referer": `https://imgsearch.com/search/${slug}`,
+			"cookie": cookieStr,
+			"user-agent": UA,
+		},
+		body: body.toString(),
+		signal: AbortSignal.timeout(15000),
+	});
+	if (!dataRes.ok) return [];
+
+	const json = await dataRes.json() as any;
+	// Response is { html: "...", count: N } — parse JSON-LD blocks embedded in HTML
+	const htmlContent: string = json?.html ?? "";
+	const ldMatches = [...htmlContent.matchAll(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/g)];
+	return ldMatches.map((m) => {
+		try {
+			const ld = JSON.parse(m[1]);
+			const url = ld.contentUrl || ld.url;
+			if (!url || !url.startsWith("http")) return null;
+			return {
+				sourceUrl: url,
+				pageUrl: ld.url || `https://imgsearch.com/search/${slug}`,
+				alt: ld.name || ld.caption || ld.description || query,
+				category: "photo",
+				width: 1200,
+				height: 800,
+			};
+		} catch { return null; }
+	}).filter(Boolean) as any[];
+}
+
+// ── PxHere ────────────────────────────────────────────────────────────────────
+// NOTE: Cloudflare challenge blocks server-side requests without valid cf_clearance cookie
+
+export async function fetchPxHere(query: string, page = 1): Promise<Array<{ sourceUrl: string; pageUrl: string; alt: string; category: string; width: number; height: number }>> {
+	const params = new URLSearchParams({ order: "latest", page: String(page), q: query, format: "json" });
+	const res = await fetch(`https://pxhere.com/en/photos?${params}`, {
+		headers: {
+			"accept": "application/json, text/javascript, */*; q=0.01",
+			"x-requested-with": "XMLHttpRequest",
+			"referer": "https://pxhere.com/en/photos?order=latest",
+			"user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36",
+		},
+		signal: AbortSignal.timeout(12000),
+	});
+	if (!res.ok) return [];
+	const json = await res.json() as any;
+	const items: any[] = json?.photos ?? json?.data ?? (Array.isArray(json) ? json : []);
+	return items.map((item: any) => {
+		const url = item?.images?.original?.url || item?.url || item?.large_src || item?.src;
+		if (!url) return null;
+		return {
+			sourceUrl: url,
+			pageUrl: item?.link ? `https://pxhere.com${item.link}` : "https://pxhere.com/",
+			alt: item?.tags?.join(", ") || item?.title || query,
+			category: item?.tags?.[0]?.toLowerCase() || "photo",
+			width: item?.width || 1920,
+			height: item?.height || 1280,
+		};
+	}).filter(Boolean) as any[];
+}
+
+export class PxHereProvider implements FallbackProvider {
+	readonly name = "PxHere";
+
+	async fetch(prompt: string, _promptVector: number[]): Promise<FallbackResult | null> {
+		const { genre, staticSlug } = matchGenre(prompt);
+		const keywords = prompt.split(/\s+/).slice(0, 5).join(" ");
+		const page = (Math.abs(prompt.split("").reduce((h, c) => (h * 31 + c.charCodeAt(0)) | 0, 0)) % 5) + 1;
+		const photos = await fetchPxHere(keywords, page);
+		if (!photos.length) return null;
+		const idx = Math.abs(prompt.split("").reduce((h, c) => (h * 31 + c.charCodeAt(0)) | 0, 0)) % photos.length;
+		const photo = photos[idx];
+		try {
+			const imgRes = await fetch(photo.sourceUrl, { signal: AbortSignal.timeout(20000) });
+			if (!imgRes.ok) return null;
+			const buffer = Buffer.from(await imgRes.arrayBuffer());
+			const mimeType = imgRes.headers.get("Content-Type") || "image/jpeg";
+			return { buffer, mimeType, provider: "PxHere", sourceUrl: photo.sourceUrl, genre, staticSlug };
+		} catch {
+			return null;
+		}
+	}
+}
+
+export class ImgSearchProvider implements FallbackProvider {
+	readonly name = "ImgSearch";
+
+	async fetch(prompt: string, _promptVector: number[]): Promise<FallbackResult | null> {
+		const { genre, staticSlug } = matchGenre(prompt);
+		const keywords = prompt.split(/\s+/).slice(0, 8).join(" ");
+		const photos = await fetchImgSearch(keywords, 30);
+		if (!photos.length) return null;
+		const idx = Math.abs(prompt.split("").reduce((h, c) => (h * 31 + c.charCodeAt(0)) | 0, 0)) % photos.length;
+		const photo = photos[idx];
+		try {
+			const imgRes = await fetch(photo.sourceUrl, { signal: AbortSignal.timeout(20000) });
+			if (!imgRes.ok) return null;
+			const buffer = Buffer.from(await imgRes.arrayBuffer());
+			const mimeType = imgRes.headers.get("Content-Type") || "image/jpeg";
+			return { buffer, mimeType, provider: "ImgSearch", sourceUrl: photo.sourceUrl, genre, staticSlug };
+		} catch {
+			return null;
+		}
+	}
+}
