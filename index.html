@@ -5,9 +5,6 @@
 		<meta name="viewport" content="width=device-width, initial-scale=1.0" />
 		<title>Lorem Ipsum Photos API Playground</title>
 
-		<!-- Google Fonts -->
-		<link rel="preconnect" href="https://fonts.googleapis.com">
-		<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 		<!-- Tailwind Play CDN -->
 		<link rel="stylesheet" href="https://cdn.html-first.com/litewind-2.0.1.css" />
 		<!-- Lucide Icons CDN -->
@@ -126,7 +123,7 @@
 					<div class="bg-white border border-gray-300 p-4 flex items-center justify-between hover:border-blue-500 transition-colors">
 						<div class="space-y-1">
 							<span class="text-xs text-gray-500 font-mono tracking-wider uppercase block">Latest Match</span>
-							<span class="text-lg font-bold font-mono text-gray-900" x-text="testResult ? (testResult.similarity * 100).toFixed(1) + '%' : '—'"></span>
+							<span class="text-lg font-bold font-mono text-gray-900" x-text="testResult ? (testResult.similarity * 100).toFixed(1) + '%' : '-'"></span>
 						</div>
 						<div class="h-10 w-10 border border-gray-300 flex items-center justify-center text-gray-600">
 							<i data-lucide="zap" class="h-4 w-4"></i>
@@ -265,14 +262,14 @@
 													@change="applyGenre($event.target.value)"
 													class="w-full bg-white border border-gray-300 px-4 py-2.5 text-xs text-gray-900 focus:outline-none focus:border-blue-500 appearance-none pr-8"
 												>
-													<option value="">— Any genre (auto-detect from prompt) —</option>
+													<option value="">- Any genre (auto-detect from prompt) -</option>
 													<template x-for="g in genres" :key="g.slug">
 														<option :value="g.slug" x-text="g.slug.replace(/-/g,' ').replace(/\b\w/g,c=>c.toUpperCase())"></option>
 													</template>
 												</select>
 												<i data-lucide="chevron-down" class="absolute right-2.5 top-2.5 h-3.5 w-3.5 text-gray-400 pointer-events-none"></i>
 											</div>
-											<p class="text-xs text-gray-400 mt-1">106 genres — selecting one seeds the prompt and triggers its curated style template at generation time.</p>
+											<p class="text-xs text-gray-400 mt-1">106 genres - selecting one seeds the prompt and triggers its curated style template at generation time.</p>
 										</div>
 
 										<!-- Text/Semantic search -->
@@ -299,7 +296,7 @@
 											</label>
 											<select
 												x-model="category"
-												class="w-full bg-white border border-gray-300 px-4 py-2.5 text-xs text-gray-900 focus:outline-none focus:border-blue-500"
+												class="w-full bg-white border border-gray-300 px-4 py-2 text-xs text-gray-900 focus:outline-none focus:border-blue-500"
 											>
 												<template x-for="cat in categories" :key="cat">
 													<option :value="cat" x-text="cat.replace(/-/g,' ').replace(/\b\w/g,c=>c.toUpperCase())"></option>
@@ -322,7 +319,7 @@
 										<!-- Format Selector -->
 										<div>
 											<label class="text-xs font-semibold text-gray-700 block mb-2">Output Delivery Format</label>
-											<div class="grid grid-cols-3 gap-2 bg-gray-50 p-1 border border-gray-300">
+											<div class="grid grid-cols-3 gap-2 bg-gray-50 border border-gray-300">
 												<template x-for="f in ['image', 'blurhash', 'lqip']">
 													<button
 														type="button"
@@ -506,10 +503,10 @@
 										<div class="bg-white p-4 border border-gray-300 text-xs">
 											<span class="text-gray-600 font-semibold block mb-2">Evaluated Match Document</span>
 											<div class="space-y-1.5" x-show="testResult">
-												<p class="text-gray-950 font-medium" x-text="testResult && testResult.matchedImage ? '&quot;' + testResult.matchedImage.text + '&quot;' : '(no match loaded — authenticate to inspect)'"></p>
+												<p class="text-gray-950 font-medium" x-text="testResult && testResult.matchedImage ? '&quot;' + testResult.matchedImage.text + '&quot;' : '(no match loaded - authenticate to inspect)'"></p>
 												<div class="flex gap-2 text-xs font-mono">
-													<span class="px-2 py-0.5 border border-gray-200 text-gray-600" x-text="testResult && testResult.matchedImage ? 'ID: ' + testResult.matchedImage._key : 'ID: —'"></span>
-													<span class="px-2 py-0.5 border border-gray-200 text-gray-600" x-text="testResult && testResult.matchedImage ? 'Category: ' + testResult.matchedImage.category : 'Category: —'"></span>
+													<span class="px-2 py-0.5 border border-gray-200 text-gray-600" x-text="testResult && testResult.matchedImage ? 'ID: ' + testResult.matchedImage._key : 'ID: -'"></span>
+													<span class="px-2 py-0.5 border border-gray-200 text-gray-600" x-text="testResult && testResult.matchedImage ? 'Category: ' + testResult.matchedImage.category : 'Category: -'"></span>
 												</div>
 											</div>
 										</div>
@@ -541,7 +538,7 @@
 														</div>
 													</template>
 													<template x-if="testResult && !testResult.blurhash">
-														<p class="text-xs font-mono text-gray-400">Blurhash not yet computed — showing source image preview. Similarity: <span class="text-blue-600 font-bold" x-text="testResult.similarity.toFixed(4)"></span></p>
+														<p class="text-xs font-mono text-gray-400">Blurhash not yet computed - showing source image preview. Similarity: <span class="text-blue-600 font-bold" x-text="testResult.similarity.toFixed(4)"></span></p>
 													</template>
 												</div>
 											</div>
@@ -817,7 +814,7 @@
 													<span x-text="
 														job.status === 'pending' ? 'Waiting for worker thread...' :
 														job.status === 'failed' ? 'Job failed' :
-														job.status === 'completed' ? 'Completed — image indexed in ArangoDB' :
+														job.status === 'completed' ? 'Completed - image indexed in ArangoDB' :
 														job.progress <= 5 ? 'Worker picked up job...' :
 														job.progress <= 25 ? 'Fetching base image + computing embedding vector...' :
 														'Generating image via provider chain, resizing variants...'
@@ -1075,7 +1072,7 @@ if (res.status === 202) {
 
 										<!-- HuggingFace -->
 										<div>
-											<label class="text-xs font-semibold text-gray-700 block mb-1">HuggingFace API Token <span class="text-gray-400 font-normal">(provider #4 — optional, improves rate limits)</span></label>
+											<label class="text-xs font-semibold text-gray-700 block mb-1">HuggingFace API Token <span class="text-gray-400 font-normal">(provider #4 - optional, improves rate limits)</span></label>
 											<input
 												type="password"
 												x-model="settings.hfApiToken"
@@ -1137,7 +1134,7 @@ if (res.status === 202) {
 												<p class="text-xs text-gray-400 mt-1">High-res wallpapers. <a href="https://wallhaven.cc/settings/account" target="_blank" class="text-blue-500 hover:underline">Get key ↗</a></p>
 											</div>
 											<div>
-												<label class="text-xs font-semibold text-gray-700 block mb-1">Pixabay API Key <span class="text-gray-400 font-normal">(optional — daily indexer)</span></label>
+												<label class="text-xs font-semibold text-gray-700 block mb-1">Pixabay API Key <span class="text-gray-400 font-normal">(optional - daily indexer)</span></label>
 												<input
 													type="password"
 													x-model="settings.pixabayApiKey"
@@ -1402,7 +1399,7 @@ if (res.status === 202) {
 			<div class="max-w-7xl mx-auto flex flex-col md:flex-row items-center justify-between gap-3 text-xs text-gray-500">
 				<div class="flex items-center gap-2">
 					<i data-lucide="zap" class="h-3.5 w-3.5 text-gray-400"></i>
-					<span>Photos CDN — AI-Powered Image Delivery Platform</span>
+					<span>Photos CDN - AI-Powered Image Delivery Platform</span>
 				</div>
 				<div class="flex items-center gap-4">
 					<a href="/about.html" class="hover:text-gray-900 transition-colors font-medium">About</a>
