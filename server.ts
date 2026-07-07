@@ -1159,6 +1159,23 @@ app.get("/api/genres", (_req, res) => {
 	res.json(GENRES.map(g => ({ slug: g.slug, staticSlug: g.staticSlug, keywords: g.keywords.slice(0, 5) })));
 });
 
+app.get("/api/categories", (_req, res) => {
+	const slugs = [...new Set(GENRES.map(g => g.staticSlug))].sort();
+	res.json(slugs);
+});
+
+app.get("/api/images/random-text", async (_req, res) => {
+	try {
+		if (!arangoDb) return res.status(503).json({ error: "DB not connected" });
+		const cursor = await arangoDb.query(`FOR img IN Images SORT RAND() LIMIT 1 RETURN img.text`);
+		const results = await cursor.all();
+		const text = results[0] || null;
+		res.json({ text });
+	} catch (e) {
+		res.status(500).json({ error: (e as Error).message });
+	}
+});
+
 app.get("/api/images", requireAdmin, async (req, res) => {
 	const images = await getImages();
 	res.json(images);

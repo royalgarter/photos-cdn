@@ -158,6 +158,9 @@ const registerAppState = () => {
 		genres: [],
 		selectedGenre: "",
 
+		// Category slugs for Hard Filter
+		categories: [],
+
 		// Live test result
 		testResult: null,
 
@@ -185,10 +188,10 @@ const registerAppState = () => {
 		// Presets
 		presets: [
 			{ label: "Waterfall", text: "cascade waterfall green forest", cat: "nature" },
-			{ label: "Cyberpunk", text: "cyberpunk streets neon city rain", cat: "urban" },
-			{ label: "Starry sky", text: "milky way starry sky dark night", cat: "space" },
+			{ label: "Cyberpunk", text: "cyberpunk streets neon city rain", cat: "technology" },
+			{ label: "Starry sky", text: "milky way starry sky dark night", cat: "aerial" },
 			{ label: "Desert Sunset", text: "warm sun sand dunes hot sunset", cat: "nature" },
-			{ label: "New Theme (Cold Glacier)", text: "frozen arctic ice cold winter glacier", cat: "nature" }
+			{ label: "Cold Glacier", text: "frozen arctic ice cold winter glacier", cat: "nature" }
 		],
 
 		semanticLabels: [
@@ -206,6 +209,8 @@ const registerAppState = () => {
 				}
 			});
 			this.fetchGenres();
+			this.fetchCategories();
+			this.fetchRandomPrompt();
 
 			// Background Poll (admin only)
 			setInterval(() => {
@@ -307,6 +312,23 @@ const registerAppState = () => {
 			try {
 				const res = await fetch("/api/genres");
 				if (res.ok) this.genres = await res.json();
+			} catch(e) {}
+		},
+
+		async fetchCategories() {
+			try {
+				const res = await fetch("/api/categories");
+				if (res.ok) this.categories = await res.json();
+			} catch(e) {}
+		},
+
+		async fetchRandomPrompt() {
+			try {
+				const res = await fetch("/api/images/random-text");
+				if (res.ok) {
+					const data = await res.json();
+					if (data.text) this.text = data.text;
+				}
 			} catch(e) {}
 		},
 

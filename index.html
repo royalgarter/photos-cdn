@@ -301,11 +301,9 @@
 												x-model="category"
 												class="w-full bg-white border border-gray-300 px-4 py-2.5 text-xs text-gray-900 focus:outline-none focus:border-blue-500"
 											>
-												<option value="nature">Nature</option>
-												<option value="urban">Urban</option>
-												<option value="space">Space</option>
-												<option value="architecture">Architecture</option>
-												<option value="animals">Animals</option>
+												<template x-for="cat in categories" :key="cat">
+													<option :value="cat" x-text="cat.replace(/-/g,' ').replace(/\b\w/g,c=>c.toUpperCase())"></option>
+												</template>
 											</select>
 										</div>
 
