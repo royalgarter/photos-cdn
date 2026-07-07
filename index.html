@@ -406,7 +406,7 @@
 										<span class="text-xs font-bold text-blue-600 font-mono shrink-0">GET</span>
 										<code
 											class="text-xs text-gray-600 font-mono truncate flex-1"
-											x-text="`/api/cdn/${width}/${height}?` + new URLSearchParams(Object.fromEntries([['category',category],['seed',seed],['format',format],...(text ? [['text',text]] : [])])).toString()"
+											x-text="`${location.protocol}://${location.host}/cdn/${width}/${height}?` + new URLSearchParams(Object.fromEntries([['category',category],['seed',seed],['format',format],...(text ? [['text',text]] : [])])).toString()"
 										></code>
 									</div>
 

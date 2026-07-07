@@ -1267,7 +1267,7 @@ app.get("/api/cdn/:width/:height/status/:jobId", async (req, res) => {
 });
 
 // THE PHOTOS CDN API ENDPOINT
-app.get("/api/cdn/:width/:height", async (req, res) => {
+app.get(["/api/cdn/:width/:height", "/cdn/:width/:height"], async (req, res) => {
 	const width = parseInt(req.params.width) || 800;
 	const height = parseInt(req.params.height) || 600;
 	const category = (req.query.category as string) || "nature";
