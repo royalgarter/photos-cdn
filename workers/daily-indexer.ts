@@ -157,10 +157,13 @@ export async function crawlFeeds(deps: IndexerDeps): Promise<{ queued: number; s
 	const ovClientSecret = settings.openverseClientSecret || process.env.OPENVERSE_CLIENT_SECRET || "";
 	const indexerQueries = ["nature landscape", "street photography", "portrait", "architecture", "wildlife"];
 
+	const randPage = () => 2 + Math.floor(Math.random() * 9); // 2–10
+
 	const [
 		pexelsPhotos, unsplashPhotos, pixabayPhotos, picjumboPhotos,
 		bingPhotos, wikimediaPhotos, flickrPhotos,
-		shopifyPhotos, freestocksPhotos,
+		shopifyPhotos, freestocksPhotos, freestocksPhotosRand,
+		shopifyPhotosRand,
 		...rest
 	] = await Promise.allSettled([
 		fetchPexelsCurated(settings.pexelsApiKey || process.env.PEXELS_API_KEY || ""),
@@ -170,14 +173,21 @@ export async function crawlFeeds(deps: IndexerDeps): Promise<{ queued: number; s
 		fetchBingDaily(16).then(photos => photos.map(p => ({ ...p, provider: "Bing" } as RawPhoto))),
 		fetchWikimediaFeatured("Quality_images_of_landscapes", 20).then(photos => photos.map(p => ({ ...p, provider: "Wikimedia" } as RawPhoto))),
 		fetchFlickrPublic("landscape nature", 20).then(photos => photos.map(p => ({ ...p, provider: "Flickr" } as RawPhoto))),
-		fetchShopifyBurst("nature").then(photos => photos.map(p => ({ ...p, provider: "ShopifyBurst" } as RawPhoto))),
+		fetchShopifyBurst("nature", 1).then(photos => photos.map(p => ({ ...p, provider: "ShopifyBurst" } as RawPhoto))),
 		fetchFreestocks(1).then(photos => photos.map(p => ({ ...p, provider: "Freestocks" } as RawPhoto))),
-		// LifeOfPix, ImgSearch, PxHere — one query per genre sample
-		...indexerQueries.flatMap(q => [
-			fetchLifeOfPix(q, 5).then(photos => photos.map(p => ({ ...p, provider: "LifeOfPix" } as RawPhoto))),
-			fetchImgSearch(q, 10).then(photos => photos.map(p => ({ ...p, provider: "ImgSearch" } as RawPhoto))),
-			fetchPxHere(q, 1).then(photos => photos.map(p => ({ ...p, provider: "PxHere" } as RawPhoto))),
-		]),
+		fetchFreestocks(randPage()).then(photos => photos.map(p => ({ ...p, provider: "Freestocks" } as RawPhoto))),
+		fetchShopifyBurst("nature", randPage()).then(photos => photos.map(p => ({ ...p, provider: "ShopifyBurst" } as RawPhoto))),
+		// LifeOfPix, ImgSearch, PxHere — page 1 + random page per query
+		...indexerQueries.flatMap(q => {
+			const rp = randPage();
+			return [
+				fetchLifeOfPix(q, 5).then(photos => photos.map(p => ({ ...p, provider: "LifeOfPix" } as RawPhoto))),
+				fetchImgSearch(q, 10, 1).then(photos => photos.map(p => ({ ...p, provider: "ImgSearch" } as RawPhoto))),
+				fetchImgSearch(q, 10, rp).then(photos => photos.map(p => ({ ...p, provider: "ImgSearch" } as RawPhoto))),
+				fetchPxHere(q, 1).then(photos => photos.map(p => ({ ...p, provider: "PxHere" } as RawPhoto))),
+				fetchPxHere(q, rp).then(photos => photos.map(p => ({ ...p, provider: "PxHere" } as RawPhoto))),
+			];
+		}),
 		...(ovClientId ? indexerQueries.map(q =>
 			fetchOpenversePhotos(ovClientId, ovClientSecret, q, 10).then(photos =>
 				photos.map(p => ({ ...p, provider: "Openverse" } as RawPhoto))
@@ -194,7 +204,9 @@ export async function crawlFeeds(deps: IndexerDeps): Promise<{ queued: number; s
 		...(wikimediaPhotos.status === "fulfilled" ? wikimediaPhotos.value : []),
 		...(flickrPhotos.status === "fulfilled" ? flickrPhotos.value : []),
 		...(shopifyPhotos.status === "fulfilled" ? shopifyPhotos.value : []),
+		...(shopifyPhotosRand.status === "fulfilled" ? shopifyPhotosRand.value : []),
 		...(freestocksPhotos.status === "fulfilled" ? freestocksPhotos.value : []),
+		...(freestocksPhotosRand.status === "fulfilled" ? freestocksPhotosRand.value : []),
 		...rest.flatMap(r => r.status === "fulfilled" ? r.value : []),
 	];
 

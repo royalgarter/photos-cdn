@@ -353,7 +353,7 @@ export class LifeOfPixProvider implements FallbackProvider {
 
 // ── ImgSearch ─────────────────────────────────────────────────────────────────
 
-export async function fetchImgSearch(query: string, perPage = 30): Promise<Array<{ sourceUrl: string; pageUrl: string; alt: string; category: string; width: number; height: number }>> {
+export async function fetchImgSearch(query: string, perPage = 30, page = 1): Promise<Array<{ sourceUrl: string; pageUrl: string; alt: string; category: string; width: number; height: number }>> {
 	const UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36";
 	const slug = query.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-");
 
@@ -374,7 +374,7 @@ export async function fetchImgSearch(query: string, perPage = 30): Promise<Array
 	const cookieStr = rawCookies.map((c: string) => c.split(";")[0]).join("; ");
 
 	// Step 2: POST search-data
-	const body = new URLSearchParams({ perPage: String(perPage), page: "1", searchQuery: query });
+	const body = new URLSearchParams({ perPage: String(perPage), page: String(page), searchQuery: query });
 	const dataRes = await fetch("https://imgsearch.com/search-data", {
 		method: "POST",
 		headers: {
