@@ -228,7 +228,19 @@ async function getEmbeddingVector(text: string): Promise<number[]> {
 	const geminiKey = settings.geminiApiKey || process.env.GEMINI_API_KEY;
 	if (!geminiKey) throw new Error("GEMINI_API_KEY not configured — required for embeddings");
 
-	const ai = new GoogleGenAI({ apiKey: geminiKey });
+	const aiConfig: any = { apiKey: geminiKey };
+	if (settings.cfAccountId) {
+		const headers: Record<string, string> = {};
+		if (settings.cfApiToken) {
+			headers["cf-aig-authorization"] = `Bearer ${settings.cfApiToken}`;
+		}
+		aiConfig.httpOptions = {
+			baseUrl: `https://gateway.ai.cloudflare.com/v1/${settings.cfAccountId}/ohara/google-ai-studio`,
+			headers
+		};
+	}
+
+	const ai = new GoogleGenAI(aiConfig);
 	addLog("system", `[Gemini] Embedding: "${text.slice(0, 80)}"`);
 	const response = await ai.models.embedContent({
 		model: "gemini-embedding-2",
