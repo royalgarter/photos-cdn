@@ -1333,7 +1333,7 @@ if (res.status === 202) {
 								<!-- Generated Tab -->
 								<div x-show="reviewTab === 'generated'" class="space-y-3">
 									<div x-show="generatedImages.length === 0" class="text-xs text-gray-400 italic py-8 text-center">No generated images yet.</div>
-									<template x-for="img in generatedImages" :key="img._key">
+									<template x-for="img in pagedGeneratedImages" :key="img._key">
 										<div class="border border-gray-200 p-3 flex gap-3 hover:bg-gray-50 transition-colors">
 											<!-- Thumbnail -->
 											<div class="flex-shrink-0 w-20 h-14 bg-gray-100 overflow-hidden">
@@ -1348,7 +1348,7 @@ if (res.status === 202) {
 											<!-- Info -->
 											<div class="flex-1 min-w-0 space-y-1">
 												<div class="flex items-start justify-between gap-2">
-													<p class="text-xs font-semibold text-gray-900 leading-tight truncate" x-text="img.text"></p>
+													<p class="text-xs font-semibold text-gray-900 leading-tight line-clamp-2" x-text="img.text"></p>
 													<button
 														@click="retryGenerated(img._key)"
 														:disabled="retryingKey === img._key"
@@ -1365,18 +1365,31 @@ if (res.status === 202) {
 													<span x-show="img.seed != null">seed: <span class="text-gray-700" x-text="img.seed"></span></span>
 												</div>
 												<div class="flex flex-wrap gap-x-3 gap-y-0.5 text-xs text-gray-400">
+													<span x-show="img.generatedBy" class="text-green-600 font-mono font-semibold">provider: <span x-text="img.generatedBy"></span></span>
 													<span>variants: <span class="text-gray-600" x-text="img.variants ? Object.keys(img.variants).filter(k => !k.endsWith('_webp') && !k.endsWith('_png')).join(', ') : 'none'"></span></span>
 													<span x-show="img.embedding?.length">vec: <span class="text-gray-600" x-text="img.embedding?.length + 'd'"></span></span>
 												</div>
+												<p x-show="img.createdAt" class="text-xs text-gray-400 font-mono" x-text="img.createdAt"></p>
 											</div>
 										</div>
 									</template>
+									<!-- Pagination -->
+									<div x-show="generatedPageCount > 1" class="flex items-center justify-between pt-2 border-t border-gray-100">
+										<span class="text-xs text-gray-400 font-mono">
+											Page <span x-text="reviewGenPage"></span> / <span x-text="generatedPageCount"></span>
+											&nbsp;·&nbsp;<span x-text="generatedImages.length"></span> total
+										</span>
+										<div class="flex gap-1">
+											<button @click="reviewGenPage = Math.max(1, reviewGenPage - 1)" :disabled="reviewGenPage === 1" class="px-2 py-1 text-xs border border-gray-200 text-gray-600 hover:bg-gray-50 disabled:opacity-40 cursor-pointer">‹ Prev</button>
+											<button @click="reviewGenPage = Math.min(generatedPageCount, reviewGenPage + 1)" :disabled="reviewGenPage === generatedPageCount" class="px-2 py-1 text-xs border border-gray-200 text-gray-600 hover:bg-gray-50 disabled:opacity-40 cursor-pointer">Next ›</button>
+										</div>
+									</div>
 								</div>
 
 								<!-- Crawled Tab -->
 								<div x-show="reviewTab === 'crawled'" class="space-y-3">
 									<div x-show="pendingPhotos.length === 0" class="text-xs text-gray-400 italic py-8 text-center">No pending crawled photos.</div>
-									<template x-for="photo in pendingPhotos" :key="photo._key">
+									<template x-for="photo in pagedCrawledPhotos" :key="photo._key">
 										<div class="border border-gray-200 p-3 flex gap-3 hover:bg-gray-50 transition-colors">
 											<!-- Thumbnail -->
 											<div class="flex-shrink-0 w-20 h-14 bg-gray-100 overflow-hidden">
@@ -1414,6 +1427,17 @@ if (res.status === 202) {
 											</div>
 										</div>
 									</template>
+									<!-- Pagination -->
+									<div x-show="crawledPageCount > 1" class="flex items-center justify-between pt-2 border-t border-gray-100">
+										<span class="text-xs text-gray-400 font-mono">
+											Page <span x-text="reviewCrawledPage"></span> / <span x-text="crawledPageCount"></span>
+											&nbsp;·&nbsp;<span x-text="pendingPhotos.length"></span> total
+										</span>
+										<div class="flex gap-1">
+											<button @click="reviewCrawledPage = Math.max(1, reviewCrawledPage - 1)" :disabled="reviewCrawledPage === 1" class="px-2 py-1 text-xs border border-gray-200 text-gray-600 hover:bg-gray-50 disabled:opacity-40 cursor-pointer">‹ Prev</button>
+											<button @click="reviewCrawledPage = Math.min(crawledPageCount, reviewCrawledPage + 1)" :disabled="reviewCrawledPage === crawledPageCount" class="px-2 py-1 text-xs border border-gray-200 text-gray-600 hover:bg-gray-50 disabled:opacity-40 cursor-pointer">Next ›</button>
+										</div>
+									</div>
 								</div>
 							</div>
 						</div>

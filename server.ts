@@ -88,6 +88,8 @@ interface ImageDocument {
 	text: string;
 	embedding: number[];
 	seed: number;
+	generatedBy?: string;
+	createdAt?: string;
 	variants?: {
 		[key: string]: string;
 	};
@@ -946,7 +948,7 @@ async function generateImageWithFallback(
 	prompt: string,
 	baseImg: { buffer: Buffer; mimeType: string; provider: string } | null,
 	settings: AppSettings
-): Promise<string> {
+): Promise<GeneratedImage> {
 	// Adjust prompt by matched genre's template before generating
 	const { adjustedPrompt, genre, staticSlug } = applyGenreTemplate(prompt);
 	if (adjustedPrompt !== prompt) {
@@ -978,12 +980,12 @@ async function generateImageWithFallback(
 		if (!genResult) generators = generators.filter(x => x != chosen);
 	}
 
-	if (genResult) return genResult.base64Image;
+	if (genResult) return genResult;
 
 	// Last resort: use base image as-is
 	if (baseImg) {
 		addLog("queue", `[Provider Chain] All providers exhausted. Using semantic best-fit source image from ${baseImg.provider}.`);
-		return `data:${baseImg.mimeType};base64,${baseImg.buffer.toString("base64")}`;
+		return { base64Image: `data:${baseImg.mimeType};base64,${baseImg.buffer.toString("base64")}`, provider: `fallback:${baseImg.provider}` };
 	}
 
 	throw new Error("All image generation providers failed and no base image available.");
@@ -1001,7 +1003,8 @@ async function generateImageAndSave(prompt: string, category: string, seed: numb
 
 	// 3. Generate image via provider fallback chain
 	const settings = await getSettings();
-	const base64Image = await generateImageWithFallback(prompt, baseImg, settings);
+	const genResult = await generateImageWithFallback(prompt, baseImg, settings);
+	const { base64Image, provider: generatedBy } = genResult;
 
 	// 4. Multi-Variant Resizing via sharp
 	addLog("queue", `[On-Demand] sharp: Reading generated image buffer...`);
@@ -1061,6 +1064,8 @@ async function generateImageAndSave(prompt: string, category: string, seed: numb
 		text: prompt,
 		seed: seed,
 		embedding: embedding,
+		generatedBy,
+		createdAt: new Date().toISOString(),
 		variants: variants
 	};
 

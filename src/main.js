@@ -176,6 +176,9 @@ const registerAppState = () => {
 		reviewTab: "generated",
 		pendingPhotos: [],
 		retryingKey: null,
+		reviewGenPage: 1,
+		reviewCrawledPage: 1,
+		reviewPageSize: 10,
 
 		// Admin auth state
 		isAdmin: false,
@@ -571,7 +574,25 @@ const registerAppState = () => {
 		},
 
 		get generatedImages() {
-			return this.images.filter(img => img._key && img._key.startsWith("gen-")).slice(0, 50);
+			return this.images.filter(img => img._key && img._key.startsWith("gen-"));
+		},
+
+		get pagedGeneratedImages() {
+			const start = (this.reviewGenPage - 1) * this.reviewPageSize;
+			return this.generatedImages.slice(start, start + this.reviewPageSize);
+		},
+
+		get generatedPageCount() {
+			return Math.max(1, Math.ceil(this.generatedImages.length / this.reviewPageSize));
+		},
+
+		get pagedCrawledPhotos() {
+			const start = (this.reviewCrawledPage - 1) * this.reviewPageSize;
+			return this.pendingPhotos.slice(start, start + this.reviewPageSize);
+		},
+
+		get crawledPageCount() {
+			return Math.max(1, Math.ceil(this.pendingPhotos.length / this.reviewPageSize));
 		},
 
 		get selectedDoc() {
