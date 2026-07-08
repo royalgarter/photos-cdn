@@ -574,7 +574,9 @@ const registerAppState = () => {
 		},
 
 		get generatedImages() {
-			return this.images.filter(img => img._key && img._key.startsWith("gen-"));
+			return this.images
+				.filter(img => img._key && img._key.startsWith("gen-"))
+				.sort((a, b) => (b.createdAt || "").localeCompare(a.createdAt || ""));
 		},
 
 		get pagedGeneratedImages() {

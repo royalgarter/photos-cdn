@@ -1098,7 +1098,7 @@ async function processQueue() {
 		await updateQueueJob(job);
 		addLog("queue", `ArangoDB Queue: Generating image for prompt "${job.prompt}"...`);
 
-		const newDoc = await generateImageAndSave(job.prompt, job.category || "nature", job.seed);
+		const newDoc = await generateImageAndSave(job.prompt, job.category || matchGenre(job.prompt).staticSlug, job.seed);
 
 		job.progress = 100;
 		job.status = "completed";
@@ -1275,9 +1275,9 @@ app.get("/api/cdn/:width/:height/status/:jobId", async (req, res) => {
 app.get(["/api/cdn/:width/:height", "/cdn/:width/:height"], async (req, res) => {
 	const width = parseInt(req.params.width) || 800;
 	const height = parseInt(req.params.height) || 600;
-	const category = (req.query.category as string) || "nature";
 	const seed = parseInt(req.query.seed as string) || 42;
 	const textQuery = req.query.text as string;
+	const category = (req.query.category as string) || (textQuery ? matchGenre(textQuery).staticSlug : "nature");
 	const format = (req.query.format as string) || "image";
 	const outputFormat = parseOutputFormat(req.query.output as string);
 	const prefer = (req.headers["prefer"] as string) || "";
@@ -1505,9 +1505,9 @@ const SRCSET_WIDTHS: { resName: string; w: number }[] = [
 ];
 
 app.get("/api/cdn/srcset", async (req, res) => {
-	const category = (req.query.category as string) || "nature";
 	const seed = parseInt(req.query.seed as string) || 42;
 	const textQuery = req.query.text as string;
+	const category = (req.query.category as string) || (textQuery ? matchGenre(textQuery).staticSlug : "nature");
 	const outputFormat = parseOutputFormat(req.query.output as string);
 	const prefer = req.headers["prefer"] || "";
 
