@@ -3,7 +3,50 @@
 	<head>
 		<meta charset="UTF-8" />
 		<meta name="viewport" content="width=device-width, initial-scale=1.0" />
-		<title>Lorem Ipsum Photos API Playground</title>
+		<title>Lorem Ipsum Photos — AI-Powered Image CDN API</title>
+
+		<!-- Primary SEO -->
+		<meta name="description" content="Zero-SDK edge-optimized dynamic image CDN with AI text-to-image generation, semantic vector search, and Cloudflare R2 delivery. Free placeholder photos API." />
+		<meta name="keywords" content="photos API, image CDN, AI image generation, placeholder images, lorem ipsum photos, semantic image search, Cloudflare R2, text to image" />
+		<meta name="robots" content="index, follow" />
+		<link rel="canonical" href="https://photos.phamthanh.me/" />
+
+		<!-- Open Graph -->
+		<meta property="og:type" content="website" />
+		<meta property="og:title" content="Lorem Ipsum Photos — AI-Powered Image CDN API" />
+		<meta property="og:description" content="Zero-SDK edge-optimized dynamic image CDN with AI text-to-image generation, semantic vector search, and Cloudflare R2 delivery." />
+		<meta property="og:url" content="https://photos.phamthanh.me/" />
+		<meta property="og:image" content="https://photos.phamthanh.me/api/cdn/1200/630?text=ai+generated+landscape+photo&format=image" />
+		<meta property="og:image:width" content="1200" />
+		<meta property="og:image:height" content="630" />
+		<meta property="og:site_name" content="Lorem Ipsum Photos" />
+
+		<!-- Twitter Card -->
+		<meta name="twitter:card" content="summary_large_image" />
+		<meta name="twitter:title" content="Lorem Ipsum Photos — AI-Powered Image CDN API" />
+		<meta name="twitter:description" content="Zero-SDK edge-optimized dynamic image CDN with AI text-to-image generation, semantic vector search, and Cloudflare R2 delivery." />
+		<meta name="twitter:image" content="https://photos.phamthanh.me/api/cdn/1200/630?text=ai+generated+landscape+photo&format=image" />
+
+		<!-- Structured Data -->
+		<script type="application/ld+json">
+		{
+			"@context": "https://schema.org",
+			"@type": "WebApplication",
+			"name": "Lorem Ipsum Photos",
+			"url": "https://photos.phamthanh.me/",
+			"description": "Zero-SDK edge-optimized dynamic image CDN with AI text-to-image generation, semantic vector search, and Cloudflare R2 delivery.",
+			"applicationCategory": "DeveloperApplication",
+			"offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
+			"featureList": [
+				"AI text-to-image generation",
+				"Semantic vector image search",
+				"Cloudflare R2 CDN delivery",
+				"Dynamic image resizing",
+				"Blurhash placeholder generation",
+				"Srcset responsive images API"
+			]
+		}
+		</script>
 
 		<!-- Tailwind Play CDN -->
 		<link rel="stylesheet" href="https://cdn.html-first.com/litewind-2.0.1.css" />
@@ -1321,12 +1364,12 @@ if (res.status === 202) {
 										<span class="ml-1 text-xs font-mono bg-gray-100 px-1.5 py-0.5 text-gray-600" x-text="generatedImages.length"></span>
 									</button>
 									<button
-										@click="reviewTab = 'crawled'; fetchPendingPhotos(); $nextTick(() => renderIcons())"
+										@click="reviewTab = 'crawled'; fetchPendingPhotos(1); $nextTick(() => renderIcons())"
 										class="px-4 py-2 text-xs font-semibold border-b-2 transition-colors cursor-pointer"
 										:class="reviewTab === 'crawled' ? 'border-purple-500 text-purple-700' : 'border-transparent text-gray-500 hover:text-gray-700'"
 									>
 										Crawled (Pending)
-										<span class="ml-1 text-xs font-mono bg-gray-100 px-1.5 py-0.5 text-gray-600" x-text="pendingPhotos.length"></span>
+										<span class="ml-1 text-xs font-mono bg-gray-100 px-1.5 py-0.5 text-gray-600" x-text="pendingTotal || pendingPhotos.length"></span>
 									</button>
 								</div>
 
@@ -1389,7 +1432,7 @@ if (res.status === 202) {
 								<!-- Crawled Tab -->
 								<div x-show="reviewTab === 'crawled'" class="space-y-3">
 									<div x-show="pendingPhotos.length === 0" class="text-xs text-gray-400 italic py-8 text-center">No pending crawled photos.</div>
-									<template x-for="photo in pagedCrawledPhotos" :key="photo._key">
+									<template x-for="photo in pendingPhotos" :key="photo._key">
 										<div class="border border-gray-200 p-3 flex gap-3 hover:bg-gray-50 transition-colors">
 											<!-- Thumbnail -->
 											<div class="flex-shrink-0 w-20 h-14 bg-gray-100 overflow-hidden">
@@ -1431,11 +1474,11 @@ if (res.status === 202) {
 									<div x-show="crawledPageCount > 1" class="flex items-center justify-between pt-2 border-t border-gray-100">
 										<span class="text-xs text-gray-400 font-mono">
 											Page <span x-text="reviewCrawledPage"></span> / <span x-text="crawledPageCount"></span>
-											&nbsp;·&nbsp;<span x-text="pendingPhotos.length"></span> total
+											&nbsp;·&nbsp;<span x-text="pendingTotal"></span> total
 										</span>
 										<div class="flex gap-1">
-											<button @click="reviewCrawledPage = Math.max(1, reviewCrawledPage - 1)" :disabled="reviewCrawledPage === 1" class="px-2 py-1 text-xs border border-gray-200 text-gray-600 hover:bg-gray-50 disabled:opacity-40 cursor-pointer">‹ Prev</button>
-											<button @click="reviewCrawledPage = Math.min(crawledPageCount, reviewCrawledPage + 1)" :disabled="reviewCrawledPage === crawledPageCount" class="px-2 py-1 text-xs border border-gray-200 text-gray-600 hover:bg-gray-50 disabled:opacity-40 cursor-pointer">Next ›</button>
+											<button @click="fetchPendingPhotos(reviewCrawledPage - 1)" :disabled="reviewCrawledPage === 1" class="px-2 py-1 text-xs border border-gray-200 text-gray-600 hover:bg-gray-50 disabled:opacity-40 cursor-pointer">‹ Prev</button>
+											<button @click="fetchPendingPhotos(reviewCrawledPage + 1)" :disabled="reviewCrawledPage === crawledPageCount" class="px-2 py-1 text-xs border border-gray-200 text-gray-600 hover:bg-gray-50 disabled:opacity-40 cursor-pointer">Next ›</button>
 										</div>
 									</div>
 								</div>

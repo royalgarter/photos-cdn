@@ -175,10 +175,13 @@ const registerAppState = () => {
 		// Review panel
 		reviewTab: "generated",
 		pendingPhotos: [],
+		pendingTotal: 0,
+		pendingPages: 1,
 		retryingKey: null,
 		reviewGenPage: 1,
 		reviewCrawledPage: 1,
 		reviewPageSize: 10,
+		crawledPageSize: 20,
 
 		// Admin auth state
 		isAdmin: false,
@@ -543,10 +546,17 @@ const registerAppState = () => {
 			}
 		},
 
-		async fetchPendingPhotos() {
+		async fetchPendingPhotos(page) {
+			page = page || this.reviewCrawledPage;
 			try {
-				const res = await fetch("/api/pending-photos");
-				if (res.ok) this.pendingPhotos = await res.json();
+				const res = await fetch(`/api/pending-photos?page=${page}&limit=${this.crawledPageSize}`);
+				if (res.ok) {
+					const data = await res.json();
+					this.pendingPhotos = data.items;
+					this.pendingTotal = data.total;
+					this.pendingPages = data.pages;
+					this.reviewCrawledPage = data.page;
+				}
 			} catch (e) {}
 		},
 
@@ -588,13 +598,8 @@ const registerAppState = () => {
 			return Math.max(1, Math.ceil(this.generatedImages.length / this.reviewPageSize));
 		},
 
-		get pagedCrawledPhotos() {
-			const start = (this.reviewCrawledPage - 1) * this.reviewPageSize;
-			return this.pendingPhotos.slice(start, start + this.reviewPageSize);
-		},
-
 		get crawledPageCount() {
-			return Math.max(1, Math.ceil(this.pendingPhotos.length / this.reviewPageSize));
+			return this.pendingPages;
 		},
 
 		get selectedDoc() {

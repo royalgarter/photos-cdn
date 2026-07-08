@@ -1723,11 +1723,17 @@ app.delete("/api/pending-photos/:key", requireAdmin, async (req, res) => {
 });
 
 // Get PendingPhotos (crawled, not yet indexed)
-app.get("/api/pending-photos", requireAdmin, async (_req, res) => {
+app.get("/api/pending-photos", requireAdmin, async (req, res) => {
 	if (!arangoDb) return res.status(503).json({ error: "DB not connected" });
-	const cursor = await arangoDb.query(`FOR p IN PendingPhotos SORT p.createdAt DESC LIMIT 100 RETURN p`);
-	const photos = await cursor.all();
-	res.json(photos);
+	const page = Math.max(1, parseInt(req.query.page as string) || 1);
+	const limit = Math.min(50, Math.max(1, parseInt(req.query.limit as string) || 20));
+	const offset = (page - 1) * limit;
+	const [cursor, countCursor] = await Promise.all([
+		arangoDb.query(`FOR p IN PendingPhotos SORT p.createdAt DESC LIMIT ${offset}, ${limit} RETURN p`),
+		arangoDb.query(`RETURN LENGTH(PendingPhotos)`)
+	]);
+	const [items, total] = await Promise.all([cursor.all(), countCursor.next() as Promise<number>]);
+	res.json({ items, total, page, limit, pages: Math.ceil(total / limit) });
 });
 
 // Retry a generated image (re-enqueue by key)
