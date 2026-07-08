@@ -1706,6 +1706,23 @@ app.post("/api/indexer/trigger", requireAdmin, async (_req, res) => {
 		});
 });
 
+// Get PendingPhotos (crawled, not yet indexed)
+app.get("/api/pending-photos", requireAdmin, async (_req, res) => {
+	if (!arangoDb) return res.status(503).json({ error: "DB not connected" });
+	const cursor = await arangoDb.query(`FOR p IN PendingPhotos SORT p.createdAt DESC LIMIT 100 RETURN p`);
+	const photos = await cursor.all();
+	res.json(photos);
+});
+
+// Retry a generated image (re-enqueue by key)
+app.post("/api/images/:key/retry", requireAdmin, async (req, res) => {
+	const images = await getImages();
+	const img = images.find(i => i._key === req.params.key);
+	if (!img) return res.status(404).json({ error: "Image not found" });
+	await enqueueJob(img.text, img.category, img.seed);
+	res.json({ queued: true, prompt: img.text, category: img.category, seed: img.seed });
+});
+
 // ==========================================
 // 7. STATIC FILES & SERVING
 // ==========================================

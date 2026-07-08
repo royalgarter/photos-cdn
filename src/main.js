@@ -172,6 +172,11 @@ const registerAppState = () => {
 		srcsetPollUrl: null,
 		srcsetPollTimer: null,
 
+		// Review panel
+		reviewTab: "generated",
+		pendingPhotos: [],
+		retryingKey: null,
+
 		// Admin auth state
 		isAdmin: false,
 
@@ -206,6 +211,7 @@ const registerAppState = () => {
 					this.fetchQueue();
 					this.fetchLogs();
 					this.fetchSettings();
+					this.fetchPendingPhotos();
 				}
 			});
 			this.fetchGenres();
@@ -534,11 +540,31 @@ const registerAppState = () => {
 			}
 		},
 
+		async fetchPendingPhotos() {
+			try {
+				const res = await fetch("/api/pending-photos");
+				if (res.ok) this.pendingPhotos = await res.json();
+			} catch (e) {}
+		},
+
+		async retryGenerated(key) {
+			this.retryingKey = key;
+			try {
+				await fetch(`/api/images/${key}/retry`, { method: "POST" });
+				await this.fetchQueue();
+			} catch (e) {}
+			this.retryingKey = null;
+		},
+
 		// Computed Properties
 		get filteredImages() {
 			return this.images.filter(
 				(img) => this.dbCategoryFilter === "all" || img.category.toLowerCase() === this.dbCategoryFilter.toLowerCase()
 			);
+		},
+
+		get generatedImages() {
+			return this.images.filter(img => img._key && img._key.startsWith("gen-")).slice(0, 50);
 		},
 
 		get selectedDoc() {
