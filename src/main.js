@@ -547,6 +547,13 @@ const registerAppState = () => {
 			} catch (e) {}
 		},
 
+		async deletePendingPhoto(key) {
+			try {
+				await fetch(`/api/pending-photos/${key}`, { method: "DELETE" });
+				this.pendingPhotos = this.pendingPhotos.filter(p => p._key !== key);
+			} catch (e) {}
+		},
+
 		async retryGenerated(key) {
 			this.retryingKey = key;
 			try {

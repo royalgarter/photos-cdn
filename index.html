@@ -1401,7 +1401,16 @@ if (res.status === 202) {
 												<div class="flex gap-2 text-xs text-gray-400">
 													<a :href="photo.pageUrl" target="_blank" rel="noopener" class="text-blue-500 hover:underline truncate max-w-xs" x-text="photo.pageUrl || photo.sourceUrl"></a>
 												</div>
-												<p class="text-xs text-gray-400 font-mono" x-text="photo.createdAt"></p>
+												<div class="flex items-center justify-between">
+													<p class="text-xs text-gray-400 font-mono" x-text="photo.createdAt"></p>
+													<button
+														@click="deletePendingPhoto(photo._key)"
+														class="flex items-center gap-1 text-xs bg-red-50 hover:bg-red-100 border border-red-200 text-red-600 px-2 py-1 font-semibold transition-colors cursor-pointer"
+													>
+														<i data-lucide="trash-2" class="h-3 w-3"></i>
+														Delete
+													</button>
+												</div>
 											</div>
 										</div>
 									</template>

@@ -1706,6 +1706,17 @@ app.post("/api/indexer/trigger", requireAdmin, async (_req, res) => {
 		});
 });
 
+// Delete a single PendingPhoto
+app.delete("/api/pending-photos/:key", requireAdmin, async (req, res) => {
+	if (!arangoDb) return res.status(503).json({ error: "DB not connected" });
+	try {
+		await arangoDb.collection("PendingPhotos").remove(req.params.key);
+		res.json({ deleted: true });
+	} catch (e) {
+		res.status(404).json({ error: "Not found" });
+	}
+});
+
 // Get PendingPhotos (crawled, not yet indexed)
 app.get("/api/pending-photos", requireAdmin, async (_req, res) => {
 	if (!arangoDb) return res.status(503).json({ error: "DB not connected" });
