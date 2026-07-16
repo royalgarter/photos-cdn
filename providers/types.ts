@@ -180,6 +180,12 @@ export const GENRES: Genre[] = [
 		keywords: ["film still", "movie still", "cinema", "behind the scenes", "set photo", "screenshot", "frame", "director", "scene"]
 	},
 	{
+		slug: "finance-photography",
+		staticSlug: "finance",
+		promptTemplate: "A polished editorial finance photography shot representing __PROMPT__. Financial news aesthetic: glowing stock tickers and candlestick charts on trading screens, glass skyscraper facades, gold coins or currency details, boardroom or trading floor setting. Dramatic blue and amber lighting, shallow depth of field, sharp reflections, Bloomberg/Financial Times cover quality.",
+		keywords: ["finance", "financial", "bitcoin", "crypto", "cryptocurrency", "blockchain", "ethereum", "stocks", "stock", "shares", "share", "market", "markets", "trading", "trader", "investor", "investment", "investing", "bank", "banking", "economy", "economic", "inflation", "earnings", "revenue", "profit", "dividend", "ipo", "etf", "bonds", "treasury", "fed", "interest rate", "wall street", "stock market", "hedge fund", "merger", "acquisition", "valuation", "portfolio", "currency", "dollar", "billion", "million"]
+	},
+	{
 		slug: "fine-art-photography",
 		staticSlug: "abstract",
 		promptTemplate: "A museum-quality fine art photography piece of __PROMPT__. Highly expressive and aesthetic, focusing on composition, emotion, and lighting rather than pure documentation. Soft, moody atmosphere, rich tonal range, printed on matte archival paper texture, evocative and deeply artistic.",
