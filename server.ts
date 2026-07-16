@@ -165,6 +165,36 @@ async function convertBuffer(input: Buffer, fmt: OutputFormat): Promise<Buffer> 
 	return s.jpeg({ quality: 85 }).toBuffer();
 }
 
+type DeliveryMode = "direct" | "redirect";
+
+function parseDeliveryMode(raw: string | undefined): DeliveryMode {
+	return (raw || "").toLowerCase() === "redirect" ? "redirect" : "direct";
+}
+
+// Delivers a remote asset either by proxying bytes (direct) or 302 (redirect).
+// Direct mode falls back to a 302 if the upstream fetch fails, so the client
+// always receives an image.
+async function deliverAsset(res: express.Response, url: string, mime: string, mode: DeliveryMode): Promise<void> {
+	res.setHeader("Content-Type", mime);
+	if (mode === "redirect") {
+		res.redirect(302, url);
+		return;
+	}
+	try {
+		const upstream = await fetch(url, { signal: AbortSignal.timeout(15000) });
+		if (!upstream.ok || !upstream.body) throw new Error(`upstream HTTP ${upstream.status}`);
+		const len = upstream.headers.get("content-length");
+		if (len) res.setHeader("Content-Length", len);
+		res.status(200);
+		for await (const chunk of upstream.body) res.write(chunk);
+		res.end();
+	} catch (err) {
+		addLog("api", `[Delivery] Direct proxy failed (${(err as Error).message}) — falling back to 302 -> ${url}`);
+		if (!res.headersSent) res.redirect(302, url);
+		else res.end();
+	}
+}
+
 async function fetchAndConvert(url: string, fmt: OutputFormat): Promise<Buffer | null> {
 	try {
 		const res = await fetch(url, { signal: AbortSignal.timeout(15000) });
@@ -1306,6 +1336,7 @@ app.get(["/api/cdn/:width/:height", "/cdn/:width/:height"], async (req, res) => 
 	const category = (req.query.category as string) || (textQuery ? matchGenre(textQuery).staticSlug : "nature");
 	const format = (req.query.format as string) || "image";
 	const outputFormat = parseOutputFormat(req.query.output as string);
+	const deliveryMode = parseDeliveryMode(req.query.delivery as string);
 	const prefer = (req.headers["prefer"] as string) || "";
 
 	addLog("api", `[Request Received] GET /${width}/${height}?category=${category}&seed=${seed}&text=${textQuery || "none"}&format=${format}&output=${outputFormat}`);
@@ -1433,9 +1464,8 @@ app.get(["/api/cdn/:width/:height", "/cdn/:width/:height"], async (req, res) => 
 			const fmtKey = outputFormat === "jpg" ? bestVariantName : `${bestVariantName}_${outputFormat}`;
 			const preGenUrl = finalImage.variants[fmtKey];
 			if (preGenUrl && (preGenUrl.startsWith("http") || preGenUrl.startsWith("s3://"))) {
-				addLog("api", `[Phase 4] Delivery: 302 → pre-generated ${outputFormat} '${fmtKey}' -> ${preGenUrl}`);
-				res.setHeader("Content-Type", OUTPUT_MIME[outputFormat]);
-				return res.redirect(302, preGenUrl);
+				addLog("api", `[Phase 4] Delivery: ${deliveryMode} → pre-generated ${outputFormat} '${fmtKey}' -> ${preGenUrl}`);
+				return deliverAsset(res, preGenUrl, OUTPUT_MIME[outputFormat], deliveryMode);
 			}
 
 			const servedData = finalImage.variants[bestVariantName] || finalImage.variants.medium || finalImage.variants.original;
@@ -1448,9 +1478,8 @@ app.get(["/api/cdn/:width/:height", "/cdn/:width/:height"], async (req, res) => 
 					if (outputFormat !== "jpg") {
 						rawBuffer = await fetchAndConvert(servedData, outputFormat);
 					} else {
-						addLog("api", `[Phase 4] Delivery: 302 → S3/R2 '${bestVariantName}' (jpg) -> ${servedData}`);
-						res.setHeader("Content-Type", "image/jpeg");
-						return res.redirect(302, servedData);
+						addLog("api", `[Phase 4] Delivery: ${deliveryMode} → S3/R2 '${bestVariantName}' (jpg) -> ${servedData}`);
+						return deliverAsset(res, servedData, "image/jpeg", deliveryMode);
 					}
 				}
 				if (rawBuffer) {
@@ -1462,8 +1491,8 @@ app.get(["/api/cdn/:width/:height", "/cdn/:width/:height"], async (req, res) => 
 			}
 		}
 
-		addLog("api", `[Phase 4] Delivery: HTTP 302 Redirecting to Cloudflare Resizing Edge CDN.`);
-		return res.redirect(302, `${finalImage.sourceUrl}&w=${width}&h=${height}&fit=crop&auto=format&q=80`);
+		addLog("api", `[Phase 4] Delivery: ${deliveryMode} → Cloudflare Resizing Edge CDN.`);
+		return deliverAsset(res, `${finalImage.sourceUrl}&w=${width}&h=${height}&fit=crop&auto=format&q=80`, OUTPUT_MIME[outputFormat], deliveryMode);
 	};
 
 	try {
