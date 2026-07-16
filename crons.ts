@@ -1,5 +1,17 @@
 import { crawlFeeds, processOnePending } from "./workers/daily-indexer.ts";
-import { getIndexerDeps, indexerStatus } from "./server.ts";
+import { getIndexerDeps, indexerStatus, drainQueue } from "./server.ts";
+
+// Cron 0: Drain the generation queue every minute. Request handlers only
+// enqueue jobs (serverless isolates die after responding, truncating any
+// fire-and-forget generation); this cron's isolate lives for the full run,
+// so generation completes and the document is saved.
+Deno.cron("drain-generation-queue", "* * * * *", async () => {
+	try {
+		await drainQueue();
+	} catch (err) {
+		console.error("[Cron] Queue drain failed:", err);
+	}
+});
 
 // Cron 1: Crawl all providers every 1 hours — metadata only, no image processing
 Deno.cron("crawl-feeds", "0 */1 * * *", async () => {

@@ -1132,6 +1132,21 @@ async function generateImageAndSave(prompt: string, category: string, seed: numb
 
 let isQueueProcessing = false;
 
+// Cron entry point: recovers jobs stranded in "processing" by a killed
+// isolate, then drains pending jobs. Safe to call every minute.
+export async function drainQueue() {
+	const jobs = await getQueue();
+	const stuckCutoff = Date.now() - 15 * 60 * 1000;
+	for (const job of jobs) {
+		if (job.status === "processing" && ((job as any).createdAtRaw || 0) < stuckCutoff) {
+			job.status = "pending";
+			await updateQueueJob(job);
+			addLog("queue", `ArangoDB Queue: Re-queued stuck job ${job.id} (isolate likely killed mid-generation)`);
+		}
+	}
+	await processQueue();
+}
+
 async function processQueue() {
 	if (isQueueProcessing) return;
 	isQueueProcessing = true;
@@ -1394,9 +1409,8 @@ app.get(["/api/cdn/:width/:height", "/cdn/:width/:height"], async (req, res) => 
 			if (prefer.includes("respond-async")) {
 				const jobId = `cdn-${Math.random().toString(36).substring(2, 9)}`;
 				addLog("api", `[Phase 3] Prefer: respond-async — returning 202, job ${jobId}`);
-				generateImageAndSave(textQuery, category, seed)
-					.then(() => addLog("api", `[Phase 3] Async job ${jobId} complete for: "${textQuery}"`))
-					.catch(err => addLog("api", `[Phase 3 ERROR] Async job ${jobId} failed: ${(err as Error).message}`));
+				enqueueJob(textQuery, category, seed)
+					.catch(err => addLog("api", `[Phase 3 ERROR] Failed to enqueue job ${jobId}: ${(err as Error).message}`));
 				res.setHeader("Location", `/api/cdn/${width}/${height}/status/${jobId}?text=${encodeURIComponent(textQuery)}&format=${format}&output=${outputFormat}`);
 				res.setHeader("Retry-After", "5");
 				setFallbackHeaders(res, provider, similarityScore, false, finalImage?.sourceUrl);
@@ -1408,11 +1422,13 @@ app.get(["/api/cdn/:width/:height", "/cdn/:width/:height"], async (req, res) => 
 				});
 			}
 
-			addLog("api", `[Phase 3] Similarity ${similarityScore.toFixed(4)} < 0.85 — SWR: serving best match, generating in background.`);
+			addLog("api", `[Phase 3] Similarity ${similarityScore.toFixed(4)} < 0.85 — SWR: serving best match, queueing generation.`);
 			cacheControl = "public, max-age=300, stale-while-revalidate=86400";
-			generateImageAndSave(textQuery, category, seed)
-				.then(() => addLog("api", `[Phase 3] Background generation complete for: "${textQuery}"`))
-				.catch(err => addLog("api", `[Phase 3 ERROR] Background generation failed: ${(err as Error).message}`));
+			// Enqueue instead of fire-and-forget: serverless isolates are killed
+			// after the response is sent, truncating in-flight generation. The
+			// queue survives in ArangoDB and is drained by the Deno.cron worker.
+			enqueueJob(textQuery, category, seed)
+				.catch(err => addLog("api", `[Phase 3 ERROR] Failed to enqueue generation: ${(err as Error).message}`));
 		} else if (!timedOut && textQuery) {
 			addLog("api", `[Phase 4] Quality Match verified (Similarity: ${similarityScore.toFixed(4)} >= 0.85). Serving directly with long-lived Cache-Control.`);
 		}
