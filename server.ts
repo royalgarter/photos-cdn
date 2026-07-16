@@ -221,11 +221,37 @@ function addLog(type: "api" | "queue" | "system", message: string, details?: any
 	writeLog(type, message, details).catch(console.error);
 }
 
+// Ops alert webhook (Slack/Discord/ntfy-compatible: POST JSON {text}).
+// Throttled so a sustained failure (e.g. gateway 401 storm) sends one alert per window.
+const ALERT_WEBHOOK_URL = process.env.ALERT_WEBHOOK_URL || "";
+const ALERT_THROTTLE_MS = 15 * 60 * 1000;
+const lastAlertAt = new Map<string, number>();
+function sendAlert(key: string, message: string) {
+	if (!ALERT_WEBHOOK_URL) return;
+	const now = Date.now();
+	if (now - (lastAlertAt.get(key) || 0) < ALERT_THROTTLE_MS) return;
+	lastAlertAt.set(key, now);
+	fetch(ALERT_WEBHOOK_URL, {
+		method: "POST",
+		headers: { "Content-Type": "application/json" },
+		body: JSON.stringify({ text: `[photos-cdn] ${message}` })
+	}).catch(err => console.error(`[ALERT] Webhook delivery failed: ${(err as Error).message}`));
+}
+
 // Gemini vector embedding — gemini-embedding-2, 128 dims. No fallback.
 async function getEmbeddingVector(text: string): Promise<number[]> {
 	const cached = getCachedEmbedding(text);
 	if (cached) return cached;
 
+	try {
+		return await computeEmbeddingVector(text);
+	} catch (err) {
+		sendAlert("embedding-failure", `Embedding failed — semantic matching degraded to category fallback. Error: ${(err as Error).message.slice(0, 300)}`);
+		throw err;
+	}
+}
+
+async function computeEmbeddingVector(text: string): Promise<number[]> {
 	const settings = await getSettings();
 	const geminiKey = settings.geminiApiKey || process.env.GEMINI_API_KEY;
 	if (!geminiKey) throw new Error("GEMINI_API_KEY not configured — required for embeddings");
