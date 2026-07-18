@@ -3,6 +3,7 @@
   "specifiers": {
     "npm:@aws-sdk/client-s3@^3.1079.0": "3.1079.0",
     "npm:@google/genai@^2.4.0": "2.10.0",
+    "npm:arangojs@10.3.1": "10.3.1",
     "npm:arangojs@^10.3.1": "10.3.1",
     "npm:express@^4.21.2": "4.22.2",
     "npm:jimp@^1.6.1": "1.6.1",
